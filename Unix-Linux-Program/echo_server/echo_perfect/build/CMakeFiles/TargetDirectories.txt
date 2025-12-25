@@ -1,0 +1,4 @@
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_perfect/build/CMakeFiles/edit_cache.dir
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_perfect/build/CMakeFiles/rebuild_cache.dir
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_perfect/build/CMakeFiles/server.dir
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_perfect/build/CMakeFiles/client.dir

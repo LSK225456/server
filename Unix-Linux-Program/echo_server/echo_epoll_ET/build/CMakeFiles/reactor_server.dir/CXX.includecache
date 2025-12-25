@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_epoll_ET/reactor_server.cpp
+iostream
+-
+vector
+-
+queue
+-
+thread
+-
+mutex
+-
+condition_variable
+-
+atomic
+-
+cstring
+-
+cstdlib
+-
+unistd.h
+-
+arpa/inet.h
+-
+sys/socket.h
+-
+sys/epoll.h
+-
+fcntl.h
+-
+cerrno
+-
+

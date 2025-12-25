@@ -1,0 +1,34 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_epoll_ET/error_handling.cpp
+cstdio
+-
+cstdlib
+-
+
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_epoll_ET/server.cpp
+cstdio
+-
+cstdlib
+-
+cstring
+-
+unistd.h
+-
+arpa/inet.h
+-
+sys/socket.h
+-
+sys/epoll.h
+-
+fcntl.h
+-
+cerrno
+-
+

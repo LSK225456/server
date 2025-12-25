@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_perfect/error_handling.cpp
+cstdio
+-
+cstdlib
+-
+
+/home/lsk1804/c++/Unix-Linux-Program/echo_server/echo_perfect/server.cpp
+cstdio
+-
+cstdlib
+-
+cstring
+-
+unistd.h
+-
+arpa/inet.h
+-
+sys/socket.h
+-
+
