@@ -33,7 +33,7 @@ EventLoop* EventLoopThread::startLoop()
         std::unique_lock<std::mutex> lock(mutex_);
         while ( loop_ == nullptr )
         {
-            cond_.wait(lock);
+            cond_.wait(lock);       // 原子地释放锁（Unlock mutex_） 并将主线程 A 放入等待队列挂起（Sleep）。
         }
         loop = loop_;
     }
