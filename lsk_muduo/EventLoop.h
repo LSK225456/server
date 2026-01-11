@@ -7,7 +7,7 @@
 #include <mutex>
 
 #include "noncopyable.h"
-#include "TImestamp.h"
+#include "Timestamp.h"
 #include "CurrentThread.h"
 
 class Channel:
