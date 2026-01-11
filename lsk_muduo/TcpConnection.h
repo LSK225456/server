@@ -64,6 +64,9 @@ private:
     void handleClose();
     void handleError();
 
+    void sendInLoop(const void* message, size_t len);
+    void shutdownInLoop();
+
     EventLoop *loop_;
     const std::string name_;
     std::atomic_int state_;
