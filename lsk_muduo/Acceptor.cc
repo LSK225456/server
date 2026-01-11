@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-static int creatNonblocking()
+static int createNonblocking()
 {
     int sockfd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (sockfd < 0)
@@ -17,9 +17,9 @@ static int creatNonblocking()
 }
 
 
-Acceptor::Acceptor(EventLoop *loop, const InetAddress &listenAddr_, bool reuseport)
+Acceptor::Acceptor(EventLoop *loop, const InetAddress &listenAddr, bool reuseport)
     : loop_(loop)
-    , acceptSocket_(creatNonblocking())
+    , acceptSocket_(createNonblocking())
     , acceptChannel_(loop, acceptSocket_.fd())
     , listenning_(false)
 {
@@ -40,7 +40,7 @@ Acceptor::~Acceptor()
 
 void Acceptor::listen()
 {
-    listening_ = true;
+    listenning_ = true;
     acceptSocket_.listen();
     acceptChannel_.enableReading();
 }
@@ -52,9 +52,9 @@ void Acceptor::handleRead()
     int connfd = acceptSocket_.accept(&peerAddr);
     if (connfd >= 0)
     {
-        if (NewConnectionCallback_)
+        if (newConnectionCallback_)
         {
-            NewConnectionCallback_(connfd, peerAddr);
+            newConnectionCallback_(connfd, peerAddr);
         }
         else 
         {

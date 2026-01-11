@@ -8,19 +8,19 @@
 class EventLoop;
 class InetAddress;
 
-class Acceptor :  noncopyable
+class Acceptor : noncopyable
 {
 public:
     using NewConnectionCallback = std::function<void(int sockfd, const InetAddress&)>;
-    Acceptor(EventLoop *loop, const InetAddress &listenAddr_, bool reuseport);
+    Acceptor(EventLoop *loop, const InetAddress &listenAddr, bool reuseport);
     ~Acceptor();
 
     void setNewConnectionCallback(const NewConnectionCallback &cb)
     {
-        NewConnectionCallback_ = cb;
+        newConnectionCallback_ = cb;
     }
 
-    bool listening() const {return listening_;}
+    bool listenning() const {return listenning_;}
     void listen();
 private:
     void handleRead();
@@ -28,6 +28,8 @@ private:
     EventLoop *loop_;
     Socket acceptSocket_;
     Channel acceptChannel_;
-    bool listening_;
+    bool listenning_;
+    NewConnectionCallback newConnectionCallback_;
+
 
 };

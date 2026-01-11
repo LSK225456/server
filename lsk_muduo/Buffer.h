@@ -18,12 +18,12 @@ public:
 
     size_t readableBytes() const 
     {
-        return writeIndex_ - readerIndex_;
+        return writerIndex_ - readerIndex_;
     }
 
     size_t writableBytes() const
     {
-        return buffer_.size() - writeIndex_;
+        return buffer_.size() - writerIndex_;
     }
 
     size_t prependableBytes() const
@@ -38,12 +38,12 @@ public:
 
     char* beginWrite()
     {
-        return begin() + writeIndex_;
+        return begin() + writerIndex_;
     }
 
-    const char* beginWrite()
+    const char* beginWrite() const
     {
-        return begin() + writeIndex_;
+        return begin() + writerIndex_;
     }
 
     void retrieve(size_t len)
@@ -60,7 +60,7 @@ public:
 
     void retrieveAll()
     {
-        readerIndex_ = writeIndex_ = kCheapPrepend;
+        readerIndex_ = writerIndex_ = kCheapPrepend;
     }
 
     std::string retrieveAllAsString()
@@ -87,7 +87,7 @@ public:
     {
         ensureWriteableBytes(len);
         std::copy(data, data+len, beginWrite());
-        writeIndex_ += len;
+        writerIndex_ += len;
     }
 
     ssize_t readFd(int fd, int* saveErrno);
@@ -107,22 +107,22 @@ private:
 
     void makeSpace(size_t len)
     {
-        if (writableBytes + readableBytes < len + kCheapPrepend)
+        if (writableBytes() + readableBytes() < len + kCheapPrepend)
         {
-            buffer_.resize(writeIndex_ + len);
+            buffer_.resize(writerIndex_ + len);
         }
         else
         {
             size_t readable = readableBytes();
             std::copy(begin() + readerIndex_,
-                                begin() + writeIndex_,
+                                begin() + writerIndex_,
                                 begin() + kCheapPrepend);
             readerIndex_ = kCheapPrepend;
-            writeIndex_ = readerIndex_ + readable;
+            writerIndex_ = readerIndex_ + readable;
         }
     }
 
     std::vector<char> buffer_;
     size_t readerIndex_;
-    size_t writeIndex_;
+    size_t writerIndex_;
 };
