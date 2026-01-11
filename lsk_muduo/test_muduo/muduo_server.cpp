@@ -1,13 +1,11 @@
-#include <muduo/net/TcpServer.h>
-#include <muduo/net/EventLoop.h>
+#include "TcpServer.h"
+#include "EventLoop.h"
 #include <iostream>
 #include <functional>
 #include <string>
 
 using namespace std;
-using namespace muduo;
-using namespace muduo::net;
-using namespace placeholders;
+using namespace std::placeholders;
 /* 
 基于muduo网络库开发服务器程序 
 1.组合TcpServer对象 
@@ -80,7 +78,7 @@ int main()
     EventLoop loop;     
 
     // 封装了 IP 和 Port，相当于准备好了 struct sockaddr_in
-    InetAddress addr("127.0.0.1", 6000);
+    InetAddress addr(6000, "127.0.0.1"); 
 
     // 定义的类，它初始化了内部的 TcpServer 对象。
     ChatServer server(&loop, addr, "ChatServer");
