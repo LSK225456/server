@@ -10,7 +10,7 @@ Logger& Logger::instance()
 }
 
 
-void Logger::setLoglevel(int level){
+void Logger::setLogLevel(int level){
     logLevel_ = level;
 }
 
@@ -19,7 +19,7 @@ void Logger::log(std::string msg)
 {
     switch (logLevel_)
     {
-        case(INFO):
+        case INFO:
             std::cout <<"[INFO]";
             break;
         case ERROR:
@@ -35,5 +35,5 @@ void Logger::log(std::string msg)
             break;
     }
 
-    std::cout << Timestamp::now().toString() << ":" << msg << std::endl;
+    std::cout << Timestamp::now().toString() << " : " << msg << std::endl;
 }

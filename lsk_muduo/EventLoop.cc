@@ -12,7 +12,7 @@
 __thread EventLoop *t_loopInThisThread = nullptr;
 const  int kPollTimeMs = 10000;
 
-int creatEventfd()
+int createEventfd()
 {
     int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (evtfd < 0)
@@ -26,9 +26,9 @@ EventLoop::EventLoop()
     : looping_(false)
     , quit_(false)
     , callingPendingFunctors_(false)
-    , threadId(CurrentThread::tid())
+    , threadId_(CurrentThread::tid())
     , poller_(Poller::newDefaultPoller(this))
-    , wakeupFd_(creatEventfd())
+    , wakeupFd_(createEventfd())
     , wakeupChannel_(new Channel(this, wakeupFd_))
 {
     LOG_DEBUG("EventLoop created %p in thread %d \n", this, threadId_);

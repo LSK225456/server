@@ -47,7 +47,7 @@ int Socket::accept(InetAddress *peeraddr)
 }
 
 
-void Socket::shutdownWrite()\
+void Socket::shutdownWrite()
 {
     if (::shutdown(sockfd_, SHUT_WR) < 0)
     {

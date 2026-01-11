@@ -17,7 +17,7 @@ static EventLoop* CheckLoopNotNull(EventLoop *loop)
 TcpServer::TcpServer(EventLoop *loop,
         const InetAddress &listenAddr,
         const std::string &nameArg,
-        Option option = kNoReusePort)
+        Option option)
         : loop_(CheckLoopNotNull(loop))
         , ipPort_(listenAddr.toIpPort())
         , name_(nameArg)
@@ -67,7 +67,7 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr)
     char buf[64] = {0};
     snprintf(buf, sizeof buf, "-%s#%d", ipPort_.c_str(), nextConnId_);
     ++nextConnId_;
-    std::string connName = name + buf;
+    std::string connName = name_ + buf;
 
     LOG_INFO("TcpServer::newConnection [%s] - new connection [%s] from %s \n",
         name_.c_str(), connName.c_str(), peerAddr.toIpPort().c_str());

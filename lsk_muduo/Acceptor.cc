@@ -14,6 +14,7 @@ static int createNonblocking()
     {
         LOG_FATAL("%s:%s:%d listen socket create err:%d \n", __FILE__, __FUNCTION__, __LINE__, errno);
     }
+    return sockfd;
 }
 
 
@@ -68,5 +69,17 @@ void Acceptor::handleRead()
         {
             LOG_ERROR("%s:%s:%d sockfd reached limit! \n", __FILE__, __FUNCTION__, __LINE__);
         }
+    }
+}
+
+std::vector<EventLoop*> EventLoopThreadPool::getAllLoops()
+{
+    if (loops_.empty())
+    {
+        return std::vector<EventLoop*>(1, baseLoop_);
+    }
+    else
+    {
+        return loops_;
     }
 }

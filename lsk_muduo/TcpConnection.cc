@@ -25,15 +25,15 @@ static EventLoop* CheckLoopNotNull(EventLoop *loop)
 
 TcpConnection::TcpConnection(EventLoop *loop,
                 const std::string &nameArg,
-                int socketfd,
+                int sockfd,
                 const InetAddress& localAddr,
                 const InetAddress& peerAddr)
             : loop_(CheckLoopNotNull(loop))
             , name_(nameArg)
             , state_(kConnecting)
             , reading_(true)
-            , socket_(new Socket(socketfd))
-            , channel_(new Channel(loop, socketfd))
+            , socket_(new Socket(sockfd))
+            , channel_(new Channel(loop, sockfd))
             , localAddr_(localAddr)
             , peerAddr_(peerAddr)
             , highWaterMark_(64*1024*1024)
@@ -69,7 +69,7 @@ void TcpConnection::send(const std::string &buf)
     {
         if (loop_->isInLoopThread())
         {
-            sendInLoop(buf.c_str(), buf.size())
+            sendInLoop(buf.c_str(), buf.size());
         }
         else
         {
@@ -80,7 +80,7 @@ void TcpConnection::send(const std::string &buf)
 }
 
 
-void TcpConnection::sendInLoop(const void* message, size_t len)
+void TcpConnection::sendInLoop(const void* data, size_t len)
 {
     ssize_t nwrote = 0;
     size_t remaining = len;
@@ -141,7 +141,7 @@ void TcpConnection::shutdown()
 {
     if (state_ == kConnected)
     {
-        setState(kDisconnecting)
+        setState(kDisconnecting);
         loop_->runInLoop(std::bind(&TcpConnection::shutdownInLoop, this));
     }
 }
@@ -169,7 +169,7 @@ void TcpConnection::connectDestroyed()
 {
     if (state_ == kConnected)
     {
-        setState(kDisconnected)
+        setState(kDisconnected);
         channel_->disableAll();
         connectionCallback_(shared_from_this());
     }
@@ -193,7 +193,7 @@ void TcpConnection::handleRead(Timestamp receiveTime)
     {
         errno = saveErrno;
         LOG_ERROR("TcpConnection::handleRead");
-        handleError()
+        handleError();
     }
 }
 
@@ -247,7 +247,7 @@ void TcpConnection::handleClose()
 void TcpConnection::handleError()
 {
     int optval;
-    sockaddr_in optlen = sizeof optval;
+    socklen_t optlen = sizeof optval;
     int err = 0;
     if(::getsockopt(channel_->fd(), SOL_SOCKET, SO_ERROR, &optval, &optlen) < 0)
     {

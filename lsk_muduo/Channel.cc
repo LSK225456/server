@@ -1,6 +1,6 @@
 #include "Channel.h"
-#include   "EventLoop.h"
-#include    "Logger.h"
+#include "EventLoop.h"
+#include "Logger.h"
 #include <sys/epoll.h>
 
 const int Channel::kNoneEvent = 0;
@@ -37,7 +37,7 @@ void Channel::tie(const std::shared_ptr<void> &obj)
 }
 
 
-void remove()
+void Channel::remove()
 {
     loop_->removeChannel(this);
 }
@@ -55,22 +55,22 @@ void  Channel::handleEventWithGuard(Timestamp receiveTime)
     
     if ((revents_ & EPOLLHUP) && !(revents_ & EPOLLIN))
     {
-        if (closeCallback_) closeCallback_;
+        if (closeCallback_) closeCallback_();
     }
 
     if (revents_ & EPOLLERR)
     {
-        if (errorCallback_) errorCallback_;
+        if (errorCallback_) errorCallback_();
     }
 
     if (revents_ & (EPOLLIN | EPOLLPRI))
     {
-        if (readCallback_) readCallback_;
+        if (readCallback_) readCallback_(receiveTime);
     }
 
     if (revents_ & EPOLLOUT) 
     {
-        if (writeCallback_) writeCallback_;
+        if (writeCallback_) writeCallback_();
     }
 
 }

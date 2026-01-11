@@ -3,9 +3,9 @@
 
 #include <semaphore.h>
 
-std::atomic_int Thread::numCrreated_(0);
+std::atomic_int Thread::numCreated_(0);
 
-Thread::Thread(ThreadFunc, const std::string &name)
+Thread::Thread(ThreadFunc func, const std::string &name)
     : started_(false)
     , joined_(false)
     , tid_(0)
@@ -49,7 +49,7 @@ void Thread::join()
 
 void Thread::setDefaultName()
 {
-    int num = ++numCrreated_;
+    int num = ++numCreated_;
     if (name_.empty())
     {
         char buf[32] ={0};

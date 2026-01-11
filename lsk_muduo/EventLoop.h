@@ -10,7 +10,7 @@
 #include "Timestamp.h"
 #include "CurrentThread.h"
 
-class Channel:
+class Channel;
 class Poller;
 
 class EventLoop : noncopyable
@@ -31,7 +31,7 @@ public:
 
     void wakeup();
 
-    void updataChannel(Channel *channel);
+    void updateChannel(Channel *channel);
     void removeChannel(Channel *channel);
     bool hasChannel(Channel *channel);
 

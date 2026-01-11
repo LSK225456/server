@@ -19,7 +19,7 @@ public:
 
     void setThreadNum(int numThreads) {numThreads_ = numThreads; }
 
-    void start(const ThreadInitCallback *cb = ThreadInitCallback());
+    void start(const ThreadInitCallback &cb = ThreadInitCallback());
 
     EventLoop* getNextLoop();
 
