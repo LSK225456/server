@@ -128,7 +128,7 @@ void EventLoop::wakeup()
 }
 
 
-void EventLoop::updataChannel(Channel *channel)
+void EventLoop::updateChannel(Channel *channel)
 {
     poller_->updateChannel(channel);
 }

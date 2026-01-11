@@ -35,18 +35,18 @@
 
 
 #ifdef MUDEBUG
-#define LOG_DEBUG(logmsgFormat, ...)\
+#define LOG_DEBUG(logmsgFormat, ...) \
     do \
     { \
         Logger &logger = Logger::instance(); \
         logger.setLogLevel(DEBUG); \
         char buf[1024] = {0}; \
-        snprintf(buf, sizeof buf, logmsgFormat, ##__VA_ARGS__); \
+        snprintf(buf, 1024, logmsgFormat, ##__VA_ARGS__); \
         logger.log(buf); \
     } while(0)
-#else   
-    #define LOG_DEBUG(logmsgFormat, ...) \
-#endif  
+#else
+    #define LOG_DEBUG(logmsgFormat, ...)
+#endif
 
 
 
