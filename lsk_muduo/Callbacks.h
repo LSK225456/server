@@ -13,3 +13,4 @@ using CloseCallback = std::function<void (const TcpConnectionPtr&)>;
 using WriteCompleteCallback = std::function<void (const TcpConnectionPtr&)>;
 using MessageCallback = std::function<void (const TcpConnectionPtr&, Buffer*, Timestamp)>;
 using HighWaterMarkCallback = std::function<void (const TcpConnectionPtr&, size_t)>;
+using TimerCallback = std::function<void()>;        // 定时器回调

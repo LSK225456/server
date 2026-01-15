@@ -2,6 +2,8 @@
 #include "Logger.h"
 #include "Poller.h"
 #include "Channel.h"
+#include "TimerQueue.h"  
+#include "TimerId.h" 
 
 #include <sys/eventfd.h>
 #include <unistd.h>
@@ -30,6 +32,7 @@ EventLoop::EventLoop()
     , poller_(Poller::newDefaultPoller(this))
     , wakeupFd_(createEventfd())
     , wakeupChannel_(new Channel(this, wakeupFd_))
+    , timerQueue_(new TimerQueue(this)) 
 {
     LOG_DEBUG("EventLoop created %p in thread %d \n", this, threadId_);
     if (t_loopInThisThread)
@@ -173,4 +176,26 @@ void EventLoop::doPendingFunctors()
     }
 
     callingPendingFunctors_ = false;
+}
+
+TimerId EventLoop::runAt(Timestamp time, Functor cb)
+{
+    return timerQueue_->addTimer(std::move(cb), time, 0.0);
+}
+
+TimerId EventLoop::runAfter(double delay, Functor cb)
+{
+    Timestamp time(addTime(Timestamp::now(), delay));
+    return runAt(time, std::move(cb));
+}
+
+TimerId EventLoop::runEvery(double interval, Functor cb)
+{
+    Timestamp time(addTime(Timestamp::now(), interval));
+    return timerQueue_->addTimer(std::move(cb), time, interval);
+}
+
+void EventLoop::cancel(TimerId timerId)
+{
+    timerQueue_->cancel(timerId);
 }

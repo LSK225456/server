@@ -12,6 +12,8 @@
 
 class Channel;
 class Poller;
+class TimerQueue;  
+class TimerId;     
 
 class EventLoop : noncopyable
 {
@@ -37,6 +39,24 @@ public:
 
     bool isInLoopThread() const { return threadId_ == CurrentThread::tid(); }
 
+    void assertInLoopThread()
+    {
+        if (!isInLoopThread())
+        {
+            // 可以添加断言或日志
+        }
+    }
+
+    // ============ 新增：定时器接口 ============
+    // 在指定时间运行回调
+    TimerId runAt(Timestamp time, Functor cb);
+    // 在 delay 秒后运行回调
+    TimerId runAfter(double delay, Functor cb);
+    // 每隔 interval 秒运行一次回调
+    TimerId runEvery(double interval, Functor cb);
+    // 取消定时器
+    void cancel(TimerId timerId);
+
 private:
     void handleRead();
     void doPendingFunctors();
@@ -59,5 +79,7 @@ private:
     std::atomic_bool callingPendingFunctors_;
     std::vector<Functor> pendingFunctors_;
     std::mutex mutex_;
+
+    std::unique_ptr<TimerQueue> timerQueue_;
 
 };

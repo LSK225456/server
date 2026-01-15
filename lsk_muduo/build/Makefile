@@ -139,6 +139,21 @@ Acceptor.s:
 .PHONY : Acceptor.s
 
 # target to build an object file
+AsyncLogging.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/AsyncLogging.o
+.PHONY : AsyncLogging.o
+
+# target to preprocess a source file
+AsyncLogging.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/AsyncLogging.i
+.PHONY : AsyncLogging.i
+
+# target to generate assembly for a file
+AsyncLogging.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/AsyncLogging.s
+.PHONY : AsyncLogging.s
+
+# target to build an object file
 Buffer.o:
 	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Buffer.o
 .PHONY : Buffer.o
@@ -167,6 +182,21 @@ Channel.i:
 Channel.s:
 	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Channel.s
 .PHONY : Channel.s
+
+# target to build an object file
+Connector.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Connector.o
+.PHONY : Connector.o
+
+# target to preprocess a source file
+Connector.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Connector.i
+.PHONY : Connector.i
+
+# target to generate assembly for a file
+Connector.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Connector.s
+.PHONY : Connector.s
 
 # target to build an object file
 CurrentThread.o:
@@ -274,6 +304,36 @@ InetAddress.s:
 .PHONY : InetAddress.s
 
 # target to build an object file
+LogFile.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/LogFile.o
+.PHONY : LogFile.o
+
+# target to preprocess a source file
+LogFile.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/LogFile.i
+.PHONY : LogFile.i
+
+# target to generate assembly for a file
+LogFile.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/LogFile.s
+.PHONY : LogFile.s
+
+# target to build an object file
+LogStream.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/LogStream.o
+.PHONY : LogStream.o
+
+# target to preprocess a source file
+LogStream.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/LogStream.i
+.PHONY : LogStream.i
+
+# target to generate assembly for a file
+LogStream.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/LogStream.s
+.PHONY : LogStream.s
+
+# target to build an object file
 Logger.o:
 	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Logger.o
 .PHONY : Logger.o
@@ -317,6 +377,21 @@ Socket.i:
 Socket.s:
 	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Socket.s
 .PHONY : Socket.s
+
+# target to build an object file
+TcpClient.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/TcpClient.o
+.PHONY : TcpClient.o
+
+# target to preprocess a source file
+TcpClient.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/TcpClient.i
+.PHONY : TcpClient.i
+
+# target to generate assembly for a file
+TcpClient.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/TcpClient.s
+.PHONY : TcpClient.s
 
 # target to build an object file
 TcpConnection.o:
@@ -364,6 +439,36 @@ Thread.s:
 .PHONY : Thread.s
 
 # target to build an object file
+Timer.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Timer.o
+.PHONY : Timer.o
+
+# target to preprocess a source file
+Timer.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Timer.i
+.PHONY : Timer.i
+
+# target to generate assembly for a file
+Timer.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Timer.s
+.PHONY : Timer.s
+
+# target to build an object file
+TimerQueue.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/TimerQueue.o
+.PHONY : TimerQueue.o
+
+# target to preprocess a source file
+TimerQueue.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/TimerQueue.i
+.PHONY : TimerQueue.i
+
+# target to generate assembly for a file
+TimerQueue.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/TimerQueue.s
+.PHONY : TimerQueue.s
+
+# target to build an object file
 Timestamp.o:
 	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Timestamp.o
 .PHONY : Timestamp.o
@@ -390,12 +495,18 @@ help:
 	@echo "... Acceptor.o"
 	@echo "... Acceptor.i"
 	@echo "... Acceptor.s"
+	@echo "... AsyncLogging.o"
+	@echo "... AsyncLogging.i"
+	@echo "... AsyncLogging.s"
 	@echo "... Buffer.o"
 	@echo "... Buffer.i"
 	@echo "... Buffer.s"
 	@echo "... Channel.o"
 	@echo "... Channel.i"
 	@echo "... Channel.s"
+	@echo "... Connector.o"
+	@echo "... Connector.i"
+	@echo "... Connector.s"
 	@echo "... CurrentThread.o"
 	@echo "... CurrentThread.i"
 	@echo "... CurrentThread.s"
@@ -417,6 +528,12 @@ help:
 	@echo "... InetAddress.o"
 	@echo "... InetAddress.i"
 	@echo "... InetAddress.s"
+	@echo "... LogFile.o"
+	@echo "... LogFile.i"
+	@echo "... LogFile.s"
+	@echo "... LogStream.o"
+	@echo "... LogStream.i"
+	@echo "... LogStream.s"
 	@echo "... Logger.o"
 	@echo "... Logger.i"
 	@echo "... Logger.s"
@@ -426,6 +543,9 @@ help:
 	@echo "... Socket.o"
 	@echo "... Socket.i"
 	@echo "... Socket.s"
+	@echo "... TcpClient.o"
+	@echo "... TcpClient.i"
+	@echo "... TcpClient.s"
 	@echo "... TcpConnection.o"
 	@echo "... TcpConnection.i"
 	@echo "... TcpConnection.s"
@@ -435,6 +555,12 @@ help:
 	@echo "... Thread.o"
 	@echo "... Thread.i"
 	@echo "... Thread.s"
+	@echo "... Timer.o"
+	@echo "... Timer.i"
+	@echo "... Timer.s"
+	@echo "... TimerQueue.o"
+	@echo "... TimerQueue.i"
+	@echo "... TimerQueue.s"
 	@echo "... Timestamp.o"
 	@echo "... Timestamp.i"
 	@echo "... Timestamp.s"

@@ -1,0 +1,92 @@
+Date : 2026-01-14 19:20:07
+Directory : /home/lsk1804/server/server/lsk_muduo
+Total : 52 files,  4590 codes, 219 comments, 916 blanks, all 5725 lines
+
+Languages
++-------------+------------+------------+------------+------------+------------+
+| language    | files      | code       | comment    | blank      | total      |
++-------------+------------+------------+------------+------------+------------+
+| C++         |         38 |      2,628 |         77 |        524 |      3,229 |
+| Log         |          1 |        572 |          0 |         62 |        634 |
+| C           |          2 |        480 |         51 |        103 |        634 |
+| CMake       |          9 |        362 |          0 |         67 |        429 |
+| CMake Cache |          1 |        280 |          0 |         64 |        344 |
+| Makefile    |          1 |        268 |         91 |         96 |        455 |
++-------------+------------+------------+------------+------------+------------+
+
+Directories
++----------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                               | files      | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                  |         52 |      4,590 |        219 |        916 |      5,725 |
+| . (Files)                                                                                          |         36 |      1,752 |          5 |        412 |      2,169 |
+| build                                                                                              |         15 |      2,780 |        195 |        491 |      3,466 |
+| build (Files)                                                                                      |          3 |        590 |         91 |        168 |        849 |
+| build/CMakeFiles                                                                                   |         12 |      2,190 |        104 |        323 |      2,617 |
+| build/CMakeFiles (Files)                                                                           |          5 |      1,130 |          0 |         81 |      1,211 |
+| build/CMakeFiles/3.10.2                                                                            |          5 |      1,002 |        104 |        236 |      1,342 |
+| build/CMakeFiles/3.10.2 (Files)                                                                    |          3 |        126 |          0 |         40 |        166 |
+| build/CMakeFiles/3.10.2/CompilerIdC                                                                |          1 |        449 |         51 |         99 |        599 |
+| build/CMakeFiles/3.10.2/CompilerIdCXX                                                              |          1 |        427 |         53 |         97 |        577 |
+| build/CMakeFiles/mymuduo.dir                                                                       |          2 |         58 |          0 |          6 |         64 |
+| test_muduo                                                                                         |          1 |         58 |         19 |         13 |         90 |
++----------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++----------------------------------------------------------------------------------------------------+-------------+------------+------------+------------+------------+
+| filename                                                                                           | language    | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------------------------------+-------------+------------+------------+------------+------------+
+| /home/lsk1804/server/server/lsk_muduo/Acceptor.cc                                                  | C++         |         62 |          0 |         11 |         73 |
+| /home/lsk1804/server/server/lsk_muduo/Acceptor.h                                                   | C++         |         27 |          0 |          8 |         35 |
+| /home/lsk1804/server/server/lsk_muduo/Buffer.cc                                                    | C++         |         39 |          0 |          7 |         46 |
+| /home/lsk1804/server/server/lsk_muduo/Buffer.h                                                     | C++         |        107 |          0 |         21 |        128 |
+| /home/lsk1804/server/server/lsk_muduo/CMakeLists.txt                                               | CMake       |         11 |          0 |          2 |         13 |
+| /home/lsk1804/server/server/lsk_muduo/Callbacks.h                                                  | C++         |         12 |          0 |          3 |         15 |
+| /home/lsk1804/server/server/lsk_muduo/Channel.cc                                                   | C++         |         58 |          0 |         18 |         76 |
+| /home/lsk1804/server/server/lsk_muduo/Channel.h                                                    | C++         |         52 |          0 |         21 |         73 |
+| /home/lsk1804/server/server/lsk_muduo/CurrentThread.cc                                             | C++         |         12 |          0 |          2 |         14 |
+| /home/lsk1804/server/server/lsk_muduo/CurrentThread.h                                              | C++         |         16 |          0 |          5 |         21 |
+| /home/lsk1804/server/server/lsk_muduo/DefaultPoller.cc                                             | C++         |         14 |          0 |          3 |         17 |
+| /home/lsk1804/server/server/lsk_muduo/EPollPoller.cc                                               | C++         |        121 |          0 |         22 |        143 |
+| /home/lsk1804/server/server/lsk_muduo/EPollPoller.h                                                | C++         |         22 |          0 |          8 |         30 |
+| /home/lsk1804/server/server/lsk_muduo/EventLoop.cc                                                 | C++         |        154 |          0 |         23 |        177 |
+| /home/lsk1804/server/server/lsk_muduo/EventLoop.h                                                  | C++         |         43 |          0 |         20 |         63 |
+| /home/lsk1804/server/server/lsk_muduo/EventLoopThread.cc                                           | C++         |         50 |          0 |         11 |         61 |
+| /home/lsk1804/server/server/lsk_muduo/EventLoopThread.h                                            | C++         |         25 |          0 |          7 |         32 |
+| /home/lsk1804/server/server/lsk_muduo/EventLoopThreadPool.cc                                       | C++         |         53 |          0 |         13 |         66 |
+| /home/lsk1804/server/server/lsk_muduo/EventLoopThreadPool.h                                        | C++         |         29 |          0 |         10 |         39 |
+| /home/lsk1804/server/server/lsk_muduo/InetAddress.cc                                               | C++         |         29 |          0 |         12 |         41 |
+| /home/lsk1804/server/server/lsk_muduo/InetAddress.h                                                | C++         |         18 |          0 |          5 |         23 |
+| /home/lsk1804/server/server/lsk_muduo/Logger.cc                                                    | C++         |         32 |          0 |          7 |         39 |
+| /home/lsk1804/server/server/lsk_muduo/Logger.h                                                     | C++         |         60 |          3 |         12 |         75 |
+| /home/lsk1804/server/server/lsk_muduo/Poller.cc                                                    | C++         |         11 |          0 |          3 |         14 |
+| /home/lsk1804/server/server/lsk_muduo/Poller.h                                                     | C++         |         24 |          0 |         10 |         34 |
+| /home/lsk1804/server/server/lsk_muduo/Socket.cc                                                    | C++         |         66 |          0 |         15 |         81 |
+| /home/lsk1804/server/server/lsk_muduo/Socket.h                                                     | C++         |         22 |          0 |          8 |         30 |
+| /home/lsk1804/server/server/lsk_muduo/TcpConnection.cc                                             | C++         |        242 |          0 |         26 |        268 |
+| /home/lsk1804/server/server/lsk_muduo/TcpConnection.h                                              | C++         |         66 |          0 |         24 |         90 |
+| /home/lsk1804/server/server/lsk_muduo/TcpServer.cc                                                 | C++         |        100 |          0 |         20 |        120 |
+| /home/lsk1804/server/server/lsk_muduo/TcpServer.h                                                  | C++         |         52 |          0 |         21 |         73 |
+| /home/lsk1804/server/server/lsk_muduo/Thread.cc                                                    | C++         |         47 |          0 |         12 |         59 |
+| /home/lsk1804/server/server/lsk_muduo/Thread.h                                                     | C++         |         30 |          0 |          9 |         39 |
+| /home/lsk1804/server/server/lsk_muduo/Timestamp.cc                                                 | C++         |         23 |          0 |          7 |         30 |
+| /home/lsk1804/server/server/lsk_muduo/Timestamp.h                                                  | C++         |         13 |          0 |          4 |         17 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeCache.txt                                         | CMake Cache |        280 |          0 |         64 |        344 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/3.10.2/CMakeCCompiler.cmake                 | CMake       |         57 |          0 |         17 |         74 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/3.10.2/CMakeCXXCompiler.cmake               | CMake       |         59 |          0 |         17 |         76 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/3.10.2/CMakeSystem.cmake                    | CMake       |         10 |          0 |          6 |         16 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/3.10.2/CompilerIdC/CMakeCCompilerId.c       | C           |        449 |         51 |         99 |        599 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/3.10.2/CompilerIdCXX/CMakeCXXCompilerId.cpp | C++         |        427 |         53 |         97 |        577 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/CMakeDirectoryInformation.cmake             | CMake       |         12 |          0 |          5 |         17 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/CMakeOutput.log                             | Log         |        572 |          0 |         62 |        634 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/Makefile.cmake                              | CMake       |        113 |          0 |          6 |        119 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/feature_tests.c                             | C           |         31 |          0 |          4 |         35 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/feature_tests.cxx                           | C++         |        402 |          0 |          4 |        406 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/mymuduo.dir/DependInfo.cmake                | CMake       |         33 |          0 |          4 |         37 |
+| /home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/mymuduo.dir/cmake_clean.cmake               | CMake       |         25 |          0 |          2 |         27 |
+| /home/lsk1804/server/server/lsk_muduo/build/Makefile                                               | Makefile    |        268 |         91 |         96 |        455 |
+| /home/lsk1804/server/server/lsk_muduo/build/cmake_install.cmake                                    | CMake       |         42 |          0 |          8 |         50 |
+| /home/lsk1804/server/server/lsk_muduo/noncopyable.h                                                | C++         |         10 |          2 |          2 |         14 |
+| /home/lsk1804/server/server/lsk_muduo/test_muduo/muduo_server.cpp                                  | C++         |         58 |         19 |         13 |         90 |
+| Total                                                                                              |             |      4,590 |        219 |        916 |      5,725 |
++----------------------------------------------------------------------------------------------------+-------------+------------+------------+------------+------------+

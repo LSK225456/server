@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <functional>
 #include "noncopyable.h"
 
 // todo: 不要通过由宏来修改 Logger 的内部状态。应该把日志级别作为参数直接传给 log 函数。
@@ -69,6 +70,13 @@ public:
     static Logger& instance();
     void setLogLevel(int level);
     void log(std::string msg);
+
+    // 设置日志输出函数（用于对接 AsyncLogging）
+    using OutputFunc = std::function<void(const char* msg, int len)>;
+    using FlushFunc = std::function<void()>;
+    
+    static void setOutput(OutputFunc);
+    static void setFlush(FlushFunc);
 
 private:
     int logLevel_;
