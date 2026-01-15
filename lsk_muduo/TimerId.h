@@ -20,7 +20,8 @@ public:
 
     // 默认拷贝构造、析构和赋值都可以
 
-    friend class TimerQueue;
+    friend class TimerQueue;    // 只有 TimerQueue 能看到 TimerId 里面的内容（指针和序号）。
+    // 对用户（如 TcpConnection）来说，TimerId 就是个黑盒，除了拿着它什么都做不了。
 
 private:
     Timer* timer_;

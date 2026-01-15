@@ -36,9 +36,13 @@ static int getSocketError(int sockfd)
     }
 }
 
-// 检查是否自连接
+// 这是一个网络编程中的经典坑。
+// 现象：当客户端尝试连接本机端口，且该端口范围正好覆盖了 ephemeral port（临时端口）范围时，
+// 操作系统可能会分配一个源端口，正好等于目的端口，导致“自己连上了自己”。
+// 结果：连接建立成功，但发数据就是发给自己。这在 TcpClient 重连逻辑中必须处理。
 static bool isSelfConnect(int sockfd)
 {
+    // ... 获取本地地址 ...
     struct sockaddr_in localaddr;
     bzero(&localaddr, sizeof localaddr);
     socklen_t addrlen = sizeof localaddr;
@@ -48,6 +52,7 @@ static bool isSelfConnect(int sockfd)
         return false;
     }
 
+    // ... 获取对端地址 ...
     struct sockaddr_in peeraddr;
     bzero(&peeraddr, sizeof peeraddr);
     addrlen = sizeof peeraddr;
@@ -56,7 +61,7 @@ static bool isSelfConnect(int sockfd)
         LOG_ERROR("sockets::getpeername");
         return false;
     }
-
+    // 核心判断：源IP==目的IP 且 源端口==目的端口
     return localaddr.sin_port == peeraddr.sin_port
         && localaddr.sin_addr.s_addr == peeraddr.sin_addr.s_addr;
 }
@@ -77,7 +82,7 @@ Connector::~Connector()
     assert(!channel_);
 }
 
-void Connector::start()
+void Connector::start()         // 用户接口
 {
     connect_ = true;
     loop_->runInLoop(std::bind(&Connector::startInLoop, this));
@@ -89,7 +94,7 @@ void Connector::startInLoop()
     assert(state_ == kDisconnected);
     if (connect_)
     {
-        connect();
+        connect();      // 发起系统调用
     }
     else
     {
@@ -97,7 +102,7 @@ void Connector::startInLoop()
     }
 }
 
-void Connector::stop()
+void Connector::stop()      // 用户接口
 {
     connect_ = false;
     loop_->queueInLoop(std::bind(&Connector::stopInLoop, this));
@@ -109,7 +114,7 @@ void Connector::stopInLoop()
     if (state_ == kConnecting)
     {
         setState(kDisconnected);
-        int sockfd = removeAndResetChannel();
+        int sockfd = removeAndResetChannel();       // 移除 Channel，不再关注 socket 事件
         retry(sockfd);
     }
 }
@@ -165,11 +170,14 @@ void Connector::restart()
     startInLoop();
 }
 
+//当 connect 返回 EINPROGRESS 时，让 epoll 帮我们盯着“什么时候连上”
 void Connector::connecting(int sockfd)
 {
     setState(kConnecting);
     assert(!channel_);
-    channel_.reset(new Channel(loop_, sockfd));
+    channel_.reset(new Channel(loop_, sockfd));     // 创建 Channel 绑定 sockfd
+    
+    // 只关心写事件
     channel_->setWriteCallback(
         std::bind(&Connector::handleWrite, this));
     channel_->setErrorCallback(
@@ -194,34 +202,38 @@ void Connector::resetChannel()
     channel_.reset();
 }
 
+// 当 epoll 通知 socket 可写时，可能有三种情况：连接成功。连接失败（例如被拒绝），socket 也是可写的。自连接
 void Connector::handleWrite()
 {
     LOG_INFO("Connector::handleWrite state=%d", static_cast<int>(state_));
 
     if (state_ == kConnecting)
     {
+        // 1. 移除 Channel   连接结果已出，不再需要监听 connect 过程了。
+        // 注意：removeAndResetChannel 会把 socket 从 epoll 中摘除。
         int sockfd = removeAndResetChannel();
         int err = getSocketError(sockfd);
-        if (err)
+        if (err)    // 情况 A: 有错误
         {
             LOG_ERROR("Connector::handleWrite - SO_ERROR = %d", err);
-            retry(sockfd);
+            retry(sockfd);  // 失败重连
         }
-        else if (isSelfConnect(sockfd))
+        else if (isSelfConnect(sockfd))     // 情况 B: 自连接
         {
             LOG_ERROR("Connector::handleWrite - Self connect");  
-            retry(sockfd);
+            retry(sockfd);      
         }
-        else
+        else        // 情况 C: 真正的成功
         {
             setState(kConnected);
-            if (connect_)
+            if (connect_)       // 再次确认用户意图（防止中途被 stop）
             {
+                // 调用 TcpClient::newConnection(sockfd)。此时，Connector 把 sockfd 的控制权移交出去了。
                 newConnectionCallback_(sockfd);
             }
             else
             {
-                ::close(sockfd);
+                ::close(sockfd);        // 用户已经不想连了，关掉
             }
         }
     }
@@ -246,16 +258,19 @@ void Connector::handleError()
 
 void Connector::retry(int sockfd)
 {
+    // 1. 关闭旧的 socket  不能复用连接失败的 socket。
     ::close(sockfd);
     setState(kDisconnected);
-    if (connect_)
+    if (connect_)       // 如果用户还想连（没有调用 stop）
     {
         LOG_INFO("Connector::retry - Retry connecting to %s in %d milliseconds.",
                  serverAddr_.toIpPort().c_str(), retryDelayMs_);
-        // 使用定时器实现延迟重连
+
+        // 使用定时器实现延迟重连    startInLoop 会再次调用 connect()。
         loop_->runAfter(retryDelayMs_ / 1000.0,
                         std::bind(&Connector::startInLoop, shared_from_this()));
-        // 指数退避，但不超过最大延迟
+        
+        // 指数退避，但不超过最大延迟   下一次延迟加倍：0.5s -> 1s -> 2s ... 直到 30s
         retryDelayMs_ = std::min(retryDelayMs_ * 2, kMaxRetryDelayMs);
     }
     else

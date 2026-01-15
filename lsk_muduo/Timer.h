@@ -11,10 +11,10 @@ class Timer : noncopyable
 public:
     Timer(TimerCallback cb, Timestamp when, double interval)
         : callback_(std::move(cb)),
-          expiration_(when),
-          interval_(interval),
-          repeat_(interval > 0.0),
-          sequence_(s_numCreated_++)
+          expiration_(when),            // 初始化到期时间
+          interval_(interval),              // 初始化间隔
+          repeat_(interval > 0.0),      // 如果 interval > 0，则标记为重复定时器
+          sequence_(s_numCreated_++)        // 获取当前全局计数并自增，赋予该 Timer 唯一的序列号
     {
     }
 
@@ -27,7 +27,7 @@ public:
     bool repeat() const { return repeat_; }
     int64_t sequence() const { return sequence_; }
 
-    void restart(Timestamp now);
+    void restart(Timestamp now);        // 重新计算下一次超时时间（仅用于重复定时器）
 
     static int64_t numCreated() { return s_numCreated_; }
 
