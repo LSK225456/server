@@ -27,7 +27,7 @@ public:
     void disconnect();
     void stop();
 
-    TcpConnectionPtr connection() const
+    TcpConnectionPtr connection() const     // 获取当前的 TcpConnection 对象
     {
         std::lock_guard<std::mutex> lock(mutex_);
         return connection_;
@@ -39,7 +39,7 @@ public:
 
     const std::string& name() const { return name_; }
 
-    // 设置回调函数
+    // 用户通过这些接口设置业务逻辑，TcpClient 会把它们“转交”给新建的 TcpConnection
     void setConnectionCallback(ConnectionCallback cb)
     { connectionCallback_ = std::move(cb); }
 
@@ -50,9 +50,10 @@ public:
     { writeCompleteCallback_ = std::move(cb); }
 
 private:
-    // 新连接建立时的回调
+    // 当 Connector 成功连上 socket 后，会调用此函数   这是 Connector -> TcpClient 的交接点
     void newConnection(int sockfd);
-    // 连接关闭时的回调
+    
+    // 当 TcpConnection 断开时（收到 CloseCallback），会调用此函数  这是 TcpConnection -> TcpClient 的通知点，用于触发重连
     void removeConnection(const TcpConnectionPtr& conn);
 
     EventLoop* loop_;

@@ -57,14 +57,15 @@ TcpClient::TcpClient(EventLoop* loop,
                      const InetAddress& serverAddr,
                      const std::string& nameArg)
     : loop_(loop),
-      connector_(new Connector(loop, serverAddr)),
+      connector_(new Connector(loop, serverAddr)),      // 创建 Connector  持有 serverAddr
       name_(nameArg),
-      connectionCallback_(defaultConnectionCallback),
+      connectionCallback_(defaultConnectionCallback),       // 设置默认回调，防止空调用
       messageCallback_(defaultMessageCallback),
       retry_(false),
       connect_(true),
       nextConnId_(1)
 {
+    // 告诉 Connector：“如果你连上了，就把 sockfd 传给我的 newConnection 函数”
     connector_->setNewConnectionCallback(
         std::bind(&TcpClient::newConnection, this, std::placeholders::_1));
     LOG_INFO("TcpClient::TcpClient[%s] - connector %p", name_.c_str(), connector_.get());
@@ -76,6 +77,7 @@ TcpClient::~TcpClient()
     TcpConnectionPtr conn;
     bool unique = false;
     {
+        // 检查当前是否持有连接，且是否是唯一持有者
         std::lock_guard<std::mutex> lock(mutex_);
         unique = connection_.unique();
         conn = connection_;
