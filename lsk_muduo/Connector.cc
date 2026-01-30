@@ -16,7 +16,7 @@ static int createNonblockingSocket()
     int sockfd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP);
     if (sockfd < 0)
     {
-        LOG_FATAL("sockets::createNonblockingSocket");
+        LOG_FATAL << "sockets::createNonblockingSocket";
     }
     return sockfd;
 }
@@ -48,7 +48,7 @@ static bool isSelfConnect(int sockfd)
     socklen_t addrlen = sizeof localaddr;
     if (::getsockname(sockfd, (struct sockaddr*)(&localaddr), &addrlen) < 0)
     {
-        LOG_ERROR("sockets::getsockname");
+        LOG_ERROR << "sockets::getsockname";
         return false;
     }
 
@@ -58,7 +58,7 @@ static bool isSelfConnect(int sockfd)
     addrlen = sizeof peeraddr;
     if (::getpeername(sockfd, (struct sockaddr*)(&peeraddr), &addrlen) < 0)
     {
-        LOG_ERROR("sockets::getpeername");
+        LOG_ERROR << "sockets::getpeername";
         return false;
     }
     // 核心判断：源IP==目的IP 且 源端口==目的端口
@@ -73,12 +73,12 @@ Connector::Connector(EventLoop* loop, const InetAddress& serverAddr)
       state_(kDisconnected),
       retryDelayMs_(kInitRetryDelayMs)
 {
-    LOG_DEBUG("Connector::Connector[%p]", this);
+    LOG_DEBUG << "Connector::Connector[" << this << "]";
 }
 
 Connector::~Connector()
 {
-    LOG_DEBUG("Connector::~Connector[%p]", this);
+    LOG_DEBUG << "Connector::~Connector[" << this << "]";
     assert(!channel_);
 }
 
@@ -98,7 +98,7 @@ void Connector::startInLoop()
     }
     else
     {
-        LOG_DEBUG("do not connect");
+        LOG_DEBUG << "do not connect";
     }
 }
 
@@ -150,12 +150,12 @@ void Connector::connect()
         case EBADF:
         case EFAULT:
         case ENOTSOCK:
-            LOG_ERROR("connect error in Connector::startInLoop %d", savedErrno);
+            LOG_ERROR << "connect error in Connector::startInLoop " << savedErrno;
             ::close(sockfd);
             break;
 
         default:
-            LOG_ERROR("Unexpected error in Connector::startInLoop %d", savedErrno);
+            LOG_ERROR << "Unexpected error in Connector::startInLoop " << savedErrno;
             ::close(sockfd);
             break;
     }
@@ -205,7 +205,7 @@ void Connector::resetChannel()
 // 当 epoll 通知 socket 可写时，可能有三种情况：连接成功。连接失败（例如被拒绝），socket 也是可写的。自连接
 void Connector::handleWrite()
 {
-    LOG_INFO("Connector::handleWrite state=%d", static_cast<int>(state_));
+    LOG_INFO << "Connector::handleWrite state=" << static_cast<int>(state_);
 
     if (state_ == kConnecting)
     {
@@ -215,12 +215,12 @@ void Connector::handleWrite()
         int err = getSocketError(sockfd);
         if (err)    // 情况 A: 有错误
         {
-            LOG_ERROR("Connector::handleWrite - SO_ERROR = %d", err);
+            LOG_ERROR << "Connector::handleWrite - SO_ERROR = " << err;
             retry(sockfd);  // 失败重连
         }
         else if (isSelfConnect(sockfd))     // 情况 B: 自连接
         {
-            LOG_ERROR("Connector::handleWrite - Self connect");  
+            LOG_ERROR << "Connector::handleWrite - Self connect";  
             retry(sockfd);      
         }
         else        // 情况 C: 真正的成功
@@ -246,12 +246,12 @@ void Connector::handleWrite()
 
 void Connector::handleError()
 {
-    LOG_ERROR("Connector::handleError state=%d", static_cast<int>(state_));
+    LOG_ERROR << "Connector::handleError state=" << static_cast<int>(state_);
     if (state_ == kConnecting)
     {
         int sockfd = removeAndResetChannel();
         int err = getSocketError(sockfd);
-        LOG_ERROR("SO_ERROR = %d", err);
+        LOG_ERROR << "SO_ERROR = " << err;
         retry(sockfd);
     }
 }
@@ -263,8 +263,7 @@ void Connector::retry(int sockfd)
     setState(kDisconnected);
     if (connect_)       // 如果用户还想连（没有调用 stop）
     {
-        LOG_INFO("Connector::retry - Retry connecting to %s in %d milliseconds.",
-                 serverAddr_.toIpPort().c_str(), retryDelayMs_);
+        LOG_INFO << "Connector::retry - Retry connecting to " << serverAddr_.toIpPort() << " in " << retryDelayMs_ << " milliseconds.";
 
         // 使用定时器实现延迟重连    startInLoop 会再次调用 connect()。
         loop_->runAfter(retryDelayMs_ / 1000.0,
@@ -275,6 +274,6 @@ void Connector::retry(int sockfd)
     }
     else
     {
-        LOG_DEBUG("do not connect");
+        LOG_DEBUG << "do not connect";
     }
 }

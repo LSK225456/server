@@ -5,6 +5,7 @@ CMakeFiles/mymuduo.dir/Acceptor.o: ../Acceptor.cc
 CMakeFiles/mymuduo.dir/Acceptor.o: ../Acceptor.h
 CMakeFiles/mymuduo.dir/Acceptor.o: ../Channel.h
 CMakeFiles/mymuduo.dir/Acceptor.o: ../InetAddress.h
+CMakeFiles/mymuduo.dir/Acceptor.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/Acceptor.o: ../Logger.h
 CMakeFiles/mymuduo.dir/Acceptor.o: ../Socket.h
 CMakeFiles/mymuduo.dir/Acceptor.o: ../Timestamp.h
@@ -14,7 +15,6 @@ CMakeFiles/mymuduo.dir/AsyncLogging.o: ../AsyncLogging.cc
 CMakeFiles/mymuduo.dir/AsyncLogging.o: ../AsyncLogging.h
 CMakeFiles/mymuduo.dir/AsyncLogging.o: ../LogFile.h
 CMakeFiles/mymuduo.dir/AsyncLogging.o: ../LogStream.h
-CMakeFiles/mymuduo.dir/AsyncLogging.o: ../Timestamp.h
 CMakeFiles/mymuduo.dir/AsyncLogging.o: ../noncopyable.h
 
 CMakeFiles/mymuduo.dir/Buffer.o: ../Buffer.cc
@@ -24,6 +24,7 @@ CMakeFiles/mymuduo.dir/Channel.o: ../Channel.cc
 CMakeFiles/mymuduo.dir/Channel.o: ../Channel.h
 CMakeFiles/mymuduo.dir/Channel.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/Channel.o: ../EventLoop.h
+CMakeFiles/mymuduo.dir/Channel.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/Channel.o: ../Logger.h
 CMakeFiles/mymuduo.dir/Channel.o: ../Timestamp.h
 CMakeFiles/mymuduo.dir/Channel.o: ../noncopyable.h
@@ -34,6 +35,7 @@ CMakeFiles/mymuduo.dir/Connector.o: ../Connector.h
 CMakeFiles/mymuduo.dir/Connector.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/Connector.o: ../EventLoop.h
 CMakeFiles/mymuduo.dir/Connector.o: ../InetAddress.h
+CMakeFiles/mymuduo.dir/Connector.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/Connector.o: ../Logger.h
 CMakeFiles/mymuduo.dir/Connector.o: ../TimerId.h
 CMakeFiles/mymuduo.dir/Connector.o: ../Timestamp.h
@@ -51,6 +53,7 @@ CMakeFiles/mymuduo.dir/DefaultPoller.o: ../noncopyable.h
 CMakeFiles/mymuduo.dir/EPollPoller.o: ../Channel.h
 CMakeFiles/mymuduo.dir/EPollPoller.o: ../EPollPoller.cc
 CMakeFiles/mymuduo.dir/EPollPoller.o: ../EPollPoller.h
+CMakeFiles/mymuduo.dir/EPollPoller.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/EPollPoller.o: ../Logger.h
 CMakeFiles/mymuduo.dir/EPollPoller.o: ../Poller.h
 CMakeFiles/mymuduo.dir/EPollPoller.o: ../Timestamp.h
@@ -61,6 +64,7 @@ CMakeFiles/mymuduo.dir/EventLoop.o: ../Channel.h
 CMakeFiles/mymuduo.dir/EventLoop.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/EventLoop.o: ../EventLoop.cc
 CMakeFiles/mymuduo.dir/EventLoop.o: ../EventLoop.h
+CMakeFiles/mymuduo.dir/EventLoop.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/EventLoop.o: ../Logger.h
 CMakeFiles/mymuduo.dir/EventLoop.o: ../Poller.h
 CMakeFiles/mymuduo.dir/EventLoop.o: ../TimerId.h
@@ -87,16 +91,15 @@ CMakeFiles/mymuduo.dir/InetAddress.o: ../InetAddress.h
 
 CMakeFiles/mymuduo.dir/LogFile.o: ../LogFile.cc
 CMakeFiles/mymuduo.dir/LogFile.o: ../LogFile.h
-CMakeFiles/mymuduo.dir/LogFile.o: ../Timestamp.h
 CMakeFiles/mymuduo.dir/LogFile.o: ../noncopyable.h
 
 CMakeFiles/mymuduo.dir/LogStream.o: ../LogStream.cc
 CMakeFiles/mymuduo.dir/LogStream.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/LogStream.o: ../noncopyable.h
 
+CMakeFiles/mymuduo.dir/Logger.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/Logger.o: ../Logger.cc
 CMakeFiles/mymuduo.dir/Logger.o: ../Logger.h
-CMakeFiles/mymuduo.dir/Logger.o: ../Timestamp.h
 CMakeFiles/mymuduo.dir/Logger.o: ../noncopyable.h
 
 CMakeFiles/mymuduo.dir/Poller.o: ../Channel.h
@@ -106,6 +109,7 @@ CMakeFiles/mymuduo.dir/Poller.o: ../Timestamp.h
 CMakeFiles/mymuduo.dir/Poller.o: ../noncopyable.h
 
 CMakeFiles/mymuduo.dir/Socket.o: ../InetAddress.h
+CMakeFiles/mymuduo.dir/Socket.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/Socket.o: ../Logger.h
 CMakeFiles/mymuduo.dir/Socket.o: ../Socket.cc
 CMakeFiles/mymuduo.dir/Socket.o: ../Socket.h
@@ -117,6 +121,7 @@ CMakeFiles/mymuduo.dir/TcpClient.o: ../Connector.h
 CMakeFiles/mymuduo.dir/TcpClient.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/TcpClient.o: ../EventLoop.h
 CMakeFiles/mymuduo.dir/TcpClient.o: ../InetAddress.h
+CMakeFiles/mymuduo.dir/TcpClient.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/TcpClient.o: ../Logger.h
 CMakeFiles/mymuduo.dir/TcpClient.o: ../Socket.h
 CMakeFiles/mymuduo.dir/TcpClient.o: ../TcpClient.cc
@@ -132,11 +137,14 @@ CMakeFiles/mymuduo.dir/TcpConnection.o: ../Channel.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../EventLoop.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../InetAddress.h
+CMakeFiles/mymuduo.dir/TcpConnection.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../Logger.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../Socket.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../TcpConnection.cc
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../TcpConnection.h
+CMakeFiles/mymuduo.dir/TcpConnection.o: ../TimerId.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../Timestamp.h
+CMakeFiles/mymuduo.dir/TcpConnection.o: ../WeakCallback.h
 CMakeFiles/mymuduo.dir/TcpConnection.o: ../noncopyable.h
 
 CMakeFiles/mymuduo.dir/TcpServer.o: ../Acceptor.h
@@ -147,6 +155,7 @@ CMakeFiles/mymuduo.dir/TcpServer.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/TcpServer.o: ../EventLoop.h
 CMakeFiles/mymuduo.dir/TcpServer.o: ../EventLoopThreadPool.h
 CMakeFiles/mymuduo.dir/TcpServer.o: ../InetAddress.h
+CMakeFiles/mymuduo.dir/TcpServer.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/TcpServer.o: ../Logger.h
 CMakeFiles/mymuduo.dir/TcpServer.o: ../Socket.h
 CMakeFiles/mymuduo.dir/TcpServer.o: ../TcpConnection.h
@@ -160,6 +169,11 @@ CMakeFiles/mymuduo.dir/Thread.o: ../Thread.cc
 CMakeFiles/mymuduo.dir/Thread.o: ../Thread.h
 CMakeFiles/mymuduo.dir/Thread.o: ../noncopyable.h
 
+CMakeFiles/mymuduo.dir/ThreadPool.o: ../Thread.h
+CMakeFiles/mymuduo.dir/ThreadPool.o: ../ThreadPool.cc
+CMakeFiles/mymuduo.dir/ThreadPool.o: ../ThreadPool.h
+CMakeFiles/mymuduo.dir/ThreadPool.o: ../noncopyable.h
+
 CMakeFiles/mymuduo.dir/Timer.o: ../Callbacks.h
 CMakeFiles/mymuduo.dir/Timer.o: ../Timer.cc
 CMakeFiles/mymuduo.dir/Timer.o: ../Timer.h
@@ -170,6 +184,7 @@ CMakeFiles/mymuduo.dir/TimerQueue.o: ../Callbacks.h
 CMakeFiles/mymuduo.dir/TimerQueue.o: ../Channel.h
 CMakeFiles/mymuduo.dir/TimerQueue.o: ../CurrentThread.h
 CMakeFiles/mymuduo.dir/TimerQueue.o: ../EventLoop.h
+CMakeFiles/mymuduo.dir/TimerQueue.o: ../LogStream.h
 CMakeFiles/mymuduo.dir/TimerQueue.o: ../Logger.h
 CMakeFiles/mymuduo.dir/TimerQueue.o: ../Timer.h
 CMakeFiles/mymuduo.dir/TimerQueue.o: ../TimerId.h

@@ -439,6 +439,21 @@ Thread.s:
 .PHONY : Thread.s
 
 # target to build an object file
+ThreadPool.o:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/ThreadPool.o
+.PHONY : ThreadPool.o
+
+# target to preprocess a source file
+ThreadPool.i:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/ThreadPool.i
+.PHONY : ThreadPool.i
+
+# target to generate assembly for a file
+ThreadPool.s:
+	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/ThreadPool.s
+.PHONY : ThreadPool.s
+
+# target to build an object file
 Timer.o:
 	$(MAKE) -f CMakeFiles/mymuduo.dir/build.make CMakeFiles/mymuduo.dir/Timer.o
 .PHONY : Timer.o
@@ -555,6 +570,9 @@ help:
 	@echo "... Thread.o"
 	@echo "... Thread.i"
 	@echo "... Thread.s"
+	@echo "... ThreadPool.o"
+	@echo "... ThreadPool.i"
+	@echo "... ThreadPool.s"
 	@echo "... Timer.o"
 	@echo "... Timer.i"
 	@echo "... Timer.s"

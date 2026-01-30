@@ -1,61 +1,55 @@
 #include "LogFile.h"
-#include "Timestamp.h"
-#include <stdio.h>
-#include <time.h>
+#include <cstdio>
+#include <ctime>
 #include <unistd.h>
-#include <assert.h>
+#include <cassert>
+#include <cstring>
 
 namespace lsk_muduo {
 
-/**
- * @brief 文件封装类 - 带缓冲的文件操作
- */
-class LogFile::File : noncopyable {
-public:
-    explicit File(const std::string& filename)
-        : fp_(::fopen(filename.c_str(), "ae")),  // 'e' for O_CLOEXEC
-          writtenBytes_(0) {
-        assert(fp_);
-        // 设置用户态缓冲区为 64KB
-        ::setbuffer(fp_, buffer_, sizeof(buffer_));
-    }
+// ==================== AppendFile 实现 ====================
 
-    ~File() {
-        ::fclose(fp_);
-    }
+AppendFile::AppendFile(const std::string& filename)
+    : fp_(::fopen(filename.c_str(), "ae")),  // 'e' for O_CLOEXEC
+      writtenBytes_(0) {
+    assert(fp_);
+    ::setbuffer(fp_, buffer_, sizeof(buffer_));
+}
 
-    void append(const char* logline, size_t len) {
-        size_t written = 0;
-        while (written != len) {
-            size_t remain = len - written;
-            size_t n = ::fwrite_unlocked(logline + written, 1, remain, fp_);
-            if (n != remain) {
-                int err = ferror(fp_);
-                if (err) {
-                    fprintf(stderr, "LogFile::File::append() failed %d\n", err);
-                    break;
-                }
+AppendFile::~AppendFile() {
+    ::fclose(fp_);
+}
+
+void AppendFile::append(const char* logline, size_t len) {
+    size_t written = 0;
+    while (written != len) {
+        size_t remain = len - written;
+        size_t n = write(logline + written, remain);
+        if (n != remain) {
+            int err = ferror(fp_);
+            if (err) {
+                fprintf(stderr, "AppendFile::append() failed %d\n", err);
+                break;
             }
-            written += n;
         }
-        writtenBytes_ += written;
+        written += n;
     }
+    writtenBytes_ += written;
+}
 
-    void flush() {
-        ::fflush(fp_);
-    }
+void AppendFile::flush() {
+    ::fflush(fp_);
+}
 
-    off_t writtenBytes() const { return writtenBytes_; }
+size_t AppendFile::write(const char* logline, size_t len) {
+    return ::fwrite_unlocked(logline, 1, len, fp_);
+}
 
-private:
-    FILE* fp_;
-    char buffer_[64 * 1024];  // 64KB 用户态缓冲区
-    off_t writtenBytes_;
-};
+// ==================== LogFile 实现 ====================
 
-// LogFile 实现
 LogFile::LogFile(const std::string& basename,
                  off_t rollSize,
+                 bool threadSafe,
                  int flushInterval,
                  int checkEveryN)
     : basename_(basename),
@@ -63,6 +57,7 @@ LogFile::LogFile(const std::string& basename,
       flushInterval_(flushInterval),
       checkEveryN_(checkEveryN),
       count_(0),
+      mutex_(threadSafe ? new std::mutex : nullptr),
       startOfPeriod_(0),
       lastRoll_(0),
       lastFlush_(0) {
@@ -72,32 +67,37 @@ LogFile::LogFile(const std::string& basename,
 LogFile::~LogFile() = default;
 
 void LogFile::append(const char* logline, int len) {
-    append_unlocked(logline, len);
+    if (mutex_) {
+        std::lock_guard<std::mutex> lock(*mutex_);
+        append_unlocked(logline, len);
+    } else {
+        append_unlocked(logline, len);
+    }
 }
 
 void LogFile::flush() {
-    file_->flush();
+    if (mutex_) {
+        std::lock_guard<std::mutex> lock(*mutex_);
+        file_->flush();
+    } else {
+        file_->flush();
+    }
 }
 
 void LogFile::append_unlocked(const char* logline, int len) {
     file_->append(logline, len);
 
-    // 检查是否需要滚动
     if (file_->writtenBytes() > rollSize_) {
         rollFile();
     } else {
         ++count_;
         if (count_ >= checkEveryN_) {
             count_ = 0;
-            time_t now = ::time(NULL);
+            time_t now = ::time(nullptr);
             time_t thisPeriod = now / kRollPerSeconds_ * kRollPerSeconds_;
-            
-            // 跨天滚动
             if (thisPeriod != startOfPeriod_) {
                 rollFile();
-            }
-            // 定时刷盘
-            else if (now - lastFlush_ > flushInterval_) {
+            } else if (now - lastFlush_ > flushInterval_) {
                 lastFlush_ = now;
                 file_->flush();
             }
@@ -114,7 +114,7 @@ bool LogFile::rollFile() {
         lastRoll_ = now;
         lastFlush_ = now;
         startOfPeriod_ = start;
-        file_.reset(new File(filename));
+        file_.reset(new AppendFile(filename));
         return true;
     }
     return false;
@@ -125,29 +125,26 @@ std::string LogFile::getLogFileName(const std::string& basename, time_t* now) {
     filename.reserve(basename.size() + 64);
     filename = basename;
 
-    // 添加时间戳
     char timebuf[32];
     struct tm tm;
-    *now = time(NULL);
+    *now = ::time(nullptr);
     localtime_r(now, &tm);
-    strftime(timebuf, sizeof(timebuf), ".%Y%m%d-%H%M%S", &tm);
+    strftime(timebuf, sizeof(timebuf), ".%Y%m%d-%H%M%S.", &tm);
     filename += timebuf;
 
-    // 添加主机名
-    char hostname[256];
-    hostname[0] = '\0';
-    if (::gethostname(hostname, sizeof(hostname)) == 0) {
-        hostname[sizeof(hostname) - 1] = '\0';
-        filename += '.';
-        filename += hostname;
+    char hostbuf[256];
+    if (::gethostname(hostbuf, sizeof(hostbuf)) == 0) {
+        hostbuf[sizeof(hostbuf) - 1] = '\0';
+        filename += hostbuf;
+    } else {
+        filename += "unknown";
     }
 
-    // 添加进程ID
     char pidbuf[32];
     snprintf(pidbuf, sizeof(pidbuf), ".%d", ::getpid());
     filename += pidbuf;
-
     filename += ".log";
+
     return filename;
 }
 

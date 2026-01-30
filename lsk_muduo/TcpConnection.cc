@@ -3,6 +3,8 @@
 #include "Socket.h"
 #include "Channel.h"
 #include "EventLoop.h"
+#include "WeakCallback.h"
+#include "TimerId.h"
 
 #include <functional>
 #include <errno.h>
@@ -17,7 +19,7 @@ static EventLoop* CheckLoopNotNull(EventLoop *loop)
 {
     if (loop == nullptr)
     {
-        LOG_FATAL("%s:%s:%d TcpConnection Loop is null! \n", __FILE__, __FUNCTION__, __LINE__);
+        LOG_FATAL << __FILE__ << ":" << __FUNCTION__ << ":" << __LINE__ << " TcpConnection Loop is null!";
     }
     return loop;
 }
@@ -51,15 +53,14 @@ TcpConnection::TcpConnection(EventLoop *loop,
         std::bind(&TcpConnection::handleError, this)
     );
 
-    LOG_INFO("TcpConnection::ctor[%s] at fd=%d\n", name_.c_str(), sockfd);
+    LOG_INFO << "TcpConnection::ctor[" << name_ << "] at fd=" << sockfd;
     socket_->setKeepAlive(true);
 }
             
 
 TcpConnection::~TcpConnection()
 {
-    LOG_INFO("TcpConnection::dtor[%s] at fd=%d state=%d \n", 
-            name_.c_str(), channel_->fd(), (int)state_);    
+    LOG_INFO << "TcpConnection::dtor[" << name_ << "] at fd=" << channel_->fd() << " state=" << static_cast<int>(state_);    
 }
 
 
@@ -88,7 +89,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
 
     if (state_ == kDisconnected)
     {
-        LOG_ERROR("disconnected, give up writing!");
+        LOG_ERROR << "disconnected, give up writing!";
         return;
     }
 
@@ -110,7 +111,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
             nwrote = 0;
             if (errno != EWOULDBLOCK)
             {
-                LOG_ERROR("TcpConnection::sendInLoop");
+                LOG_ERROR << "TcpConnection::sendInLoop";
                 if (errno == EPIPE || errno == ECONNRESET) // SIGPIPE  RESET
                 {
                     faultError = true;
@@ -155,6 +156,51 @@ void TcpConnection::shutdownInLoop()
 }
 
 
+void TcpConnection::forceClose()
+{
+    // 只有在 kConnected 或 kDisconnecting 状态才需要处理
+    // kDisconnecting: 可能 shutdown() 后对端没响应，需要强制关闭
+    if (state_ == kConnected || state_ == kDisconnecting)
+    {
+        setState(kDisconnecting);
+        // 使用 queueInLoop 而非 runInLoop，确保在当前回调完成后执行
+        // 使用 shared_from_this() 延长生命周期，确保回调执行时对象存活
+        loop_->queueInLoop(std::bind(&TcpConnection::forceCloseInLoop, shared_from_this()));
+    }
+}
+
+
+void TcpConnection::forceCloseWithDelay(double seconds)
+{
+    if (state_ == kConnected || state_ == kDisconnecting)
+    {
+        setState(kDisconnecting);
+        // 使用 makeWeakCallback 而非直接 bind
+        // 原因：定时器触发时 TcpConnection 可能已析构
+        // WeakCallback 会检查 weak_ptr，若对象已死则不调用
+        // 
+        // 注意：这里调用 forceClose 而非 forceCloseInLoop
+        // 避免竞态条件：runAfter 返回前连接可能被其他线程关闭
+        loop_->runAfter(
+            seconds,
+            makeWeakCallback(shared_from_this(), &TcpConnection::forceClose));
+    }
+}
+
+
+void TcpConnection::forceCloseInLoop()
+{
+    loop_->assertInLoopThread();
+    // 再次检查状态，因为在排队期间可能已经被关闭
+    if (state_ == kConnected || state_ == kDisconnecting)
+    {
+        // 模拟收到 0 字节（对端关闭），触发 handleClose
+        // 这样可以复用已有的关闭逻辑
+        handleClose();
+    }
+}
+
+
 void TcpConnection::connectEstablished()
 {
     setState(kConnected);
@@ -192,7 +238,7 @@ void TcpConnection::handleRead(Timestamp receiveTime)
     else
     {
         errno = saveErrno;
-        LOG_ERROR("TcpConnection::handleRead");
+        LOG_ERROR << "TcpConnection::handleRead";
         handleError();
     }
 }
@@ -222,19 +268,19 @@ void TcpConnection::handleWrite()
         } 
         else
         {
-            LOG_ERROR("TcpConnection::handleWrite");
+            LOG_ERROR << "TcpConnection::handleWrite";
         }
     }
     else
     {
-        LOG_ERROR("TcpConnection fd=%d is down, no more writing \n", channel_->fd());
+        LOG_ERROR << "TcpConnection fd=" << channel_->fd() << " is down, no more writing";
     }
 }
 
 
 void TcpConnection::handleClose()
 {
-    LOG_INFO("TcpConnection::handleClose fd=%d state=%d \n", channel_->fd(), (int)state_);
+    LOG_INFO << "TcpConnection::handleClose fd=" << channel_->fd() << " state=" << static_cast<int>(state_);
     setState(kDisconnected);
     channel_->disableAll();
 
@@ -257,7 +303,7 @@ void TcpConnection::handleError()
     {
         err = optval;
     }
-    LOG_ERROR("TcpConnection::handleError name:%s - SO_ERROR:%d \n", name_.c_str(), err);
+    LOG_ERROR << "TcpConnection::handleError name:" << name_ << " - SO_ERROR:" << err;
 }
 
 

@@ -16,7 +16,7 @@ int createTimerfd()
     int timerfd = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (timerfd < 0)
     {
-        LOG_FATAL("Failed in timerfd_create");
+        LOG_FATAL << "Failed in timerfd_create";
     }
     return timerfd;
 }
@@ -48,10 +48,10 @@ void readTimerfd(int timerfd, Timestamp now)
 {
     uint64_t howmany;
     ssize_t n = ::read(timerfd, &howmany, sizeof howmany);
-    LOG_INFO("TimerQueue::handleRead() %lu at %s", howmany, now.toString().c_str());
+    LOG_INFO << "TimerQueue::handleRead() " << howmany << " at " << now.toString();
     if (n != sizeof howmany)
     {
-        LOG_ERROR("TimerQueue::handleRead() reads %ld bytes instead of 8", n);
+        LOG_ERROR << "TimerQueue::handleRead() reads " << n << " bytes instead of 8";
     }
 }
 
@@ -68,7 +68,7 @@ void resetTimerfd(int timerfd, Timestamp expiration)
     int ret = ::timerfd_settime(timerfd, 0, &newValue, &oldValue);
     if (ret)
     {
-        LOG_ERROR("timerfd_settime() failed");
+        LOG_ERROR << "timerfd_settime() failed";
     }
 }
 

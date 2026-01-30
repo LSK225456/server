@@ -18,7 +18,7 @@ static InetAddress getPeerAddr(int sockfd)
     socklen_t addrlen = sizeof addr;
     if (::getpeername(sockfd, (struct sockaddr*)(&addr), &addrlen) < 0)
     {
-        LOG_ERROR("sockets::getPeerAddr");
+        LOG_ERROR << "sockets::getPeerAddr";
     }
     return InetAddress(addr);
 }
@@ -31,7 +31,7 @@ static InetAddress getLocalAddr(int sockfd)
     socklen_t addrlen = sizeof addr;
     if (::getsockname(sockfd, (struct sockaddr*)(&addr), &addrlen) < 0)
     {
-        LOG_ERROR("sockets::getLocalAddr");
+        LOG_ERROR << "sockets::getLocalAddr";
     }
     return InetAddress(addr);
 }
@@ -39,10 +39,7 @@ static InetAddress getLocalAddr(int sockfd)
 // 默认的连接回调
 static void defaultConnectionCallback(const TcpConnectionPtr& conn)
 {
-    LOG_INFO("TcpClient - connection %s -> %s is %s",
-             conn->localAddress().toIpPort().c_str(),
-             conn->peerAddress().toIpPort().c_str(),
-             conn->connected() ? "UP" : "DOWN");
+    LOG_INFO << "TcpClient - connection " << conn->localAddress().toIpPort() << " -> " << conn->peerAddress().toIpPort() << " is " << (conn->connected() ? "UP" : "DOWN");
 }
 
 // 默认的消息回调
@@ -68,12 +65,12 @@ TcpClient::TcpClient(EventLoop* loop,
     // 告诉 Connector：“如果你连上了，就把 sockfd 传给我的 newConnection 函数”
     connector_->setNewConnectionCallback(
         std::bind(&TcpClient::newConnection, this, std::placeholders::_1));
-    LOG_INFO("TcpClient::TcpClient[%s] - connector %p", name_.c_str(), connector_.get());
+    LOG_INFO << "TcpClient::TcpClient[" << name_ << "] - connector " << connector_.get();
 }
 
 TcpClient::~TcpClient()
 {
-    LOG_INFO("TcpClient::~TcpClient[%s] - connector %p", name_.c_str(), connector_.get());
+    LOG_INFO << "TcpClient::~TcpClient[" << name_ << "] - connector " << connector_.get();
     TcpConnectionPtr conn;
     bool unique = false;
     {
@@ -102,8 +99,7 @@ TcpClient::~TcpClient()
 
 void TcpClient::connect()
 {
-    LOG_INFO("TcpClient::connect[%s] - connecting to %s",
-             name_.c_str(), connector_->serverAddress().toIpPort().c_str());
+    LOG_INFO << "TcpClient::connect[" << name_ << "] - connecting to " << connector_->serverAddress().toIpPort();
     connect_ = true;
     connector_->start();
 }
@@ -171,8 +167,7 @@ void TcpClient::removeConnection(const TcpConnectionPtr& conn)
     loop_->queueInLoop(std::bind(&TcpConnection::connectDestroyed, conn));
     if (retry_ && connect_)
     {
-        LOG_INFO("TcpClient::connect[%s] - Reconnecting to %s",
-                 name_.c_str(), connector_->serverAddress().toIpPort().c_str());
+        LOG_INFO << "TcpClient::connect[" << name_ << "] - Reconnecting to " << connector_->serverAddress().toIpPort();
         connector_->restart();
     }
 }

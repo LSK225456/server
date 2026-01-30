@@ -12,7 +12,7 @@ static int createNonblocking()
     int sockfd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (sockfd < 0)
     {
-        LOG_FATAL("%s:%s:%d listen socket create err:%d \n", __FILE__, __FUNCTION__, __LINE__, errno);
+        LOG_FATAL << __FILE__ << ":" << __FUNCTION__ << ":" << __LINE__ << " listen socket create err:" << errno;
     }
     return sockfd;
 }
@@ -64,10 +64,10 @@ void Acceptor::handleRead()
     }
     else
     {
-       LOG_ERROR("%s:%s:%d accept err:%d \n", __FILE__, __FUNCTION__, __LINE__, errno);
+       LOG_ERROR << __FILE__ << ":" << __FUNCTION__ << ":" << __LINE__ << " accept err:" << errno;
         if (errno == EMFILE)    // 系统分配的文件描述符fd上限达到，应该提高分配上限，做分布式处理
         {
-            LOG_ERROR("%s:%s:%d sockfd reached limit! \n", __FILE__, __FUNCTION__, __LINE__);
+            LOG_ERROR << __FILE__ << ":" << __FUNCTION__ << ":" << __LINE__ << " sockfd reached limit!";
         }
     }
 }

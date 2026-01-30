@@ -34,7 +34,40 @@ public:
 
     void send(const std::string &buf);
 
+    // 优雅关闭：先关闭写端，等待数据发送完毕
     void shutdown();
+    
+    // ============ 强制关闭接口 ============
+    /**
+     * forceClose - 强制立即关闭连接
+     * 
+     * 与 shutdown() 的区别：
+     * - shutdown(): 优雅关闭，只关闭写端(半关闭)，等待发送缓冲区数据发完
+     * - forceClose(): 直接关闭整个连接，丢弃未发送的数据
+     * 
+     * 使用场景：
+     * - 检测到恶意客户端
+     * - 连接超时需要立即踢掉
+     * - 服务器关闭时强制断开所有连接
+     * 
+     * 线程安全：可在任意线程调用
+     */
+    void forceClose();
+    
+    /**
+     * forceCloseWithDelay - 延迟强制关闭（超时踢人）
+     * 
+     * 典型用途：设置一个超时时间，如果在此期间连接未正常关闭，则强制关闭
+     * 
+     * 示例：shutdown() 后设置 3 秒超时
+     *   conn->shutdown();
+     *   conn->forceCloseWithDelay(3.0);  // 3秒后如果还没关闭则强制关闭
+     * 
+     * 注意：使用 WeakCallback 防止回调时 TcpConnection 已析构
+     * 
+     * @param seconds 延迟时间（秒）
+     */
+    void forceCloseWithDelay(double seconds);
 
     void setConnectionCallback(const ConnectionCallback& cb)
     { connectionCallback_ = cb; }
@@ -66,6 +99,7 @@ private:
 
     void sendInLoop(const void* message, size_t len);
     void shutdownInLoop();
+    void forceCloseInLoop();    // forceClose 的 loop 线程执行版本
 
     EventLoop *loop_;
     const std::string name_;
