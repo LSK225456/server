@@ -216,8 +216,7 @@ void TimerQueue::reset(const std::vector<Entry>& expired, Timestamp now)
         // 1. 判断是否重复 (repeat) 且 未被取消 (cancelingTimers_)
         // 场景：如果是一个重复定时器，但在它自己的回调函数里调用了 cancel()，
         // 那么它会出现在 cancelingTimers_ 列表中。此时虽然它 repeat 为 true，也不应该重启。
-        if (it.second->repeat()
-            && cancelingTimers_.find(timer) == cancelingTimers_.end())
+        if (it.second->repeat()  && cancelingTimers_.find(timer) == cancelingTimers_.end())
         {
             it.second->restart(now);        // 计算新时间：now + interval
             insert(it.second);                      // 重新塞回 timers_ 和 activeTimers_
