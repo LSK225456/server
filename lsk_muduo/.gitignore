@@ -1,0 +1,49 @@
+# 编译产物
+build/
+lib/*.so*
+lib/*.a
+bin/*
+*.o
+*.so
+*.so.*
+*.a
+
+# CMake生成文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# 编译器和IDE生成的文件
+*.swp
+*.swo
+*~
+.vscode/
+.vs/
+.idea/
+*.user
+*.suo
+*.vcxproj*
+*.sln
+
+# 调试文件
+*.log
+core
+core.*
+vgcore.*
+
+# 可执行文件
+test_muduo/muduo_server
+*.out
+*.exe
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.bak
+*.orig
