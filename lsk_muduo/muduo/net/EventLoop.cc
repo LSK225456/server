@@ -27,14 +27,14 @@ int createEventfd()
 EventLoop::EventLoop()
     : looping_(false)
     , quit_(false)
-    , callingPendingFunctors_(false)
     , threadId_(CurrentThread::tid())
+    , callingPendingFunctors_(false)
     , poller_(Poller::newDefaultPoller(this))
     , wakeupFd_(createEventfd())
     , wakeupChannel_(new Channel(this, wakeupFd_))
     , timerQueue_(new TimerQueue(this)) 
 {
-    LOG_DEBUG << "EventLoop created " << this << " in thread " << threadId_;
+    LOG_DEBUG << "EventLoop created in thread " << threadId_;
     if (t_loopInThisThread)
     {
         LOG_FATAL << "Another EventLoop " << t_loopInThisThread << " exists in this thread " << threadId_;
@@ -63,7 +63,7 @@ void EventLoop::loop()
     looping_ = true;
     quit_ = false;
 
-    LOG_INFO << "EventLoop " << this << " start looping";
+    LOG_INFO << "EventLoop start looping";
 
     while(!quit_)
     {
@@ -76,7 +76,7 @@ void EventLoop::loop()
         doPendingFunctors();
     }
 
-    LOG_INFO << "EventLoop " << this << " stop looping.";
+    LOG_INFO << "EventLoop stop looping.";
     looping_ = false;
 }
 

@@ -37,7 +37,7 @@ Timestamp EPollPoller::poll(int timeoutMs, ChannelList *activeChannels)
     {
         LOG_INFO << numEvents << " events happened";
         fillActiveChannels(numEvents, activeChannels);
-        if (numEvents == events_.size())
+        if (static_cast<size_t>(numEvents) == events_.size())
         {
             events_.resize(events_.size() * 2);
         }
@@ -76,7 +76,7 @@ void EPollPoller::updateChannel(Channel *channel)
     }
     else
     {
-        int fd = channel->fd();
+        // int fd = channel->fd();  // unused
         if (channel->isNoneEvent())
         {
             update(EPOLL_CTL_DEL, channel);
