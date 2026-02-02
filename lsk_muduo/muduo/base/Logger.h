@@ -4,6 +4,11 @@
 #include "LogStream.h"
 #include <functional>
 
+// 防止系统宏与枚举值冲突
+#ifdef DEBUG
+#undef DEBUG
+#endif
+
 namespace lsk_muduo {
 
 class Logger : noncopyable {

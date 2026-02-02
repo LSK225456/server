@@ -1,3 +1,7 @@
-/home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/rebuild_cache.dir
-/home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/mymuduo.dir
-/home/lsk1804/server/server/lsk_muduo/build/CMakeFiles/edit_cache.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/install/strip.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/edit_cache.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/lsk_muduo.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/list_install_components.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/install/local.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/rebuild_cache.dir
+/home/lsk/server/server/lsk_muduo/build/CMakeFiles/install.dir

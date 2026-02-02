@@ -152,6 +152,19 @@ mkdir -p "$BUILD_DIR"
 mkdir -p "lib"
 mkdir -p "bin"
 
+# 检查并清理CMake缓存（处理不同用户或路径变化的情况）
+if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    CURRENT_PATH=$(pwd)
+    CACHED_PATH=$(grep "CMAKE_HOME_DIRECTORY" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | cut -d= -f2 || echo "")
+    CACHED_BUILD_TYPE=$(grep "CMAKE_BUILD_TYPE" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | cut -d= -f2 || echo "")
+    
+    # 如果缓存路径或构建类型与当前配置不匹配，删除缓存
+    if [ -n "$CACHED_PATH" ] && ([ "$CACHED_PATH" != "$CURRENT_PATH" ] || [ "$CACHED_BUILD_TYPE" != "$BUILD_TYPE" ]); then
+        print_warning "检测到CMake缓存配置不匹配，自动清理..."
+        rm -rf "$BUILD_DIR/CMakeCache.txt" "$BUILD_DIR/CMakeFiles"
+    fi
+fi
+
 # 进入构建目录
 cd "$BUILD_DIR"
 
@@ -222,3 +235,4 @@ print_info "  ./build.sh -d        # Debug模式编译"
 print_info "============================================="
 
 exit 0
+

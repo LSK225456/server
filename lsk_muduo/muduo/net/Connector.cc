@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <strings.h>
 #include <cassert>
+#include <cstdint>
 
 // 创建非阻塞 socket
 static int createNonblockingSocket()
@@ -73,12 +74,12 @@ Connector::Connector(EventLoop* loop, const InetAddress& serverAddr)
       state_(kDisconnected),
       retryDelayMs_(kInitRetryDelayMs)
 {
-    LOG_DEBUG << "Connector::Connector[" << this << "]";
+    LOG_DEBUG << "Connector::Connector[" << reinterpret_cast<uintptr_t>(this) << "]";
 }
 
 Connector::~Connector()
 {
-    LOG_DEBUG << "Connector::~Connector[" << this << "]";
+    LOG_DEBUG << "Connector::~Connector[" << reinterpret_cast<uintptr_t>(this) << "]";
     assert(!channel_);
 }
 

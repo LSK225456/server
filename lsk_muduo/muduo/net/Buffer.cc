@@ -23,7 +23,7 @@ ssize_t Buffer::readFd(int fd, int *saveErrno)
     {
         *saveErrno =errno;
     }
-    else if (n <= writable)
+    else if (n <= static_cast<ssize_t>(writable))
     {
         writerIndex_ += n;
     }

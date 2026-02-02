@@ -28,10 +28,10 @@ EventLoop::EventLoop()
     : looping_(false)
     , quit_(false)
     , threadId_(CurrentThread::tid())
-    , callingPendingFunctors_(false)
     , poller_(Poller::newDefaultPoller(this))
     , wakeupFd_(createEventfd())
     , wakeupChannel_(new Channel(this, wakeupFd_))
+    , callingPendingFunctors_(false)
     , timerQueue_(new TimerQueue(this)) 
 {
     LOG_DEBUG << "EventLoop created in thread " << threadId_;
