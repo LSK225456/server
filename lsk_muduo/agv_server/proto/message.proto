@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package agv.proto;
+
+import "common.proto";
+
+// ==================== 上行消息（Vehicle -> Server）====================
+
+/**
+ * @brief AGV 遥测数据（高频 50Hz）
+ * @note 核心监控数据，用于数字孪生展示和交通管制
+ */
+message AgvTelemetry {
+    // 基础信息
+    string agv_id    = 1;  // 车辆唯一标识符
+    int64  timestamp = 2;  // 发送时间戳（微秒，用于 RTT 计算）
+    
+    // 定位数据（坐标系：X 正方向为车辆前方，原点取决于建图原点）
+    double x          = 3;  // X 坐标（米）
+    double y          = 4;  // Y 坐标（米）
+    double theta      = 5;  // 航向角（度，degree，0° 为 X 正方向，逆时针为正）
+    double confidence = 6;  // 定位置信度（0.0-1.0，低于阈值需报警）
+    
+    // 动力学数据
+    double linear_velocity  = 7;   // 线速度（米/秒）
+    double angular_velocity = 8;   // 角速度（度/秒，degree/s）
+    double acceleration     = 9;   // 加速度（米/秒²，监控急停性能）
+    
+    // 负载状态
+    double payload_weight = 10;  // 载货重量（千克，kg，0 表示空载）
+    
+    // 设备状态
+    double battery      = 11;  // 电量（百分比，0.0-100.0）
+    uint32 error_code   = 12;  // 故障码（0 表示正常）
+    double fork_height  = 13;  // 货叉高度（米，用于监控叉取动作）
+}
+
+/**
+ * @brief MPC 预测轨迹（中频/高频）
+ * @note 车端规划的未来几秒预测轨迹，用于可视化和多车交通预测
+ */
+message MpcTrajectory {
+    string agv_id         = 1;  // 车辆 ID
+    int64  timestamp      = 2;  // 发送时间戳（微秒）
+    repeated TimedPoint predicted_path = 3;  // 预测路径点串（时间升序）
+}
+
+/**
+ * @brief 任务反馈（事件驱动/低频）
+ * @note 反馈调度任务的执行情况
+ */
+message TaskFeedback {
+    string     agv_id            = 1;  // 车辆 ID
+    int64      timestamp         = 2;  // 发送时间戳（微秒）
+    string     task_id           = 3;  // 任务唯一标识符
+    TaskStatus status            = 4;  // 任务状态
+    uint32     current_node_index = 5;  // 当前执行到路径的第几个点（从 0 开始）
+}
+
+// ==================== 下行消息（Server -> Vehicle）====================
+
+/**
+ * @brief 系统级控制指令（低频/高优先）
+ * @note 最高优先级，紧急制动在此
+ */
+message AgvCommand {
+    string      target_agv_id = 1;  // 目标车辆 ID（空表示广播）
+    int64       timestamp     = 2;  // 发送时间戳（微秒）
+    CommandType cmd_type      = 3;  // 指令类型
+}
+
+/**
+ * @brief 导航任务（低频）
+ * @note 下发 A* 全局路径
+ */
+message NavigationTask {
+    string    target_agv_id = 1;  // 目标车辆 ID
+    int64     timestamp     = 2;  // 发送时间戳（微秒）
+    string    task_id       = 3;  // 任务唯一标识符
+    Point     target_node   = 4;  // 终点坐标
+    OperationType operation = 5;  // 到达后执行的操作
+    repeated Point global_path = 6;  // A* 算出的全局路径点串
+}
+
+/**
+ * @brief 延迟探测（中频）
+ * @note 用于测量 RTT（往返时间）
+ */
+message LatencyProbe {
+    string target_agv_id = 1;  // 目标车辆 ID（Ping）或源车辆 ID（Pong）
+    int64  send_timestamp = 2;  // 发送时间戳（微秒）
+    uint64 seq_num        = 3;  // 序列号（用于配对 Ping/Pong）
+    bool   is_response    = 4;  // false=Ping, true=Pong
+}
+
+// ==================== 通用消息 ====================
+
+/**
+ * @brief 通用响应
+ * @note 服务器对客户端请求的标准回复
+ */
+message CommonResponse {
+    StatusCode status       = 1;  // 状态码
+    string     message      = 2;  // 状态描述信息
+    int64      timestamp    = 3;  // 响应时间戳（微秒）
+}
+
+/**
+ * @brief 心跳消息
+ * @note 保持连接活跃，5 秒无消息则断开
+ */
+message Heartbeat {
+    string agv_id    = 1;  // 车辆 ID
+    int64  timestamp = 2;  // 发送时间戳（微秒）
+}
+
+// ==================== 顶层消息包装（Envelope）====================
+
+/**
+ * @brief 消息包装器（所有消息的统一外壳）
+ * @note 使用 oneof 实现类型安全的消息分发
+ * @note 消息 ID 在包头中（LengthHeaderCodec 的 8 字节头部）
+ */
+message MessageEnvelope {
+    oneof payload {
+        // 上行消息（0x1000 - 0x1FFF）
+        AgvTelemetry    telemetry      = 1;   // 0x1001
+        MpcTrajectory   mpc_trajectory = 2;   // 0x1002
+        TaskFeedback    task_feedback  = 3;   // 0x1003
+        
+        // 下行消息（0x2000 - 0x2FFF）
+        AgvCommand      command        = 11;  // 0x2001
+        NavigationTask  nav_task       = 12;  // 0x2002
+        LatencyProbe    latency_probe  = 13;  // 0x2003
+        
+        // 通用消息（0x3000 - 0x3FFF）
+        CommonResponse  response       = 21;  // 0x3001
+        Heartbeat       heartbeat      = 22;  // 0x3002
+    }
+}

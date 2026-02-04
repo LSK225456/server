@@ -1,7 +1,7 @@
 # CMakeLists.txt for lsk_muduo
 # 现代化、工业级别的CMake构建配置
 
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.14)
 
 # 项目定义
 project(lsk_muduo 
@@ -128,3 +128,12 @@ option(BUILD_TESTS "Build test programs" OFF)
 if(BUILD_TESTS)
     add_subdirectory(test_muduo)
 endif()
+
+# 启用测试
+enable_testing()
+
+# 添加测试子目录
+add_subdirectory(test_muduo)
+
+# 添加 AGV 服务器模块
+add_subdirectory(agv_server)

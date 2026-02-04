@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package agv.proto;
+
+// ==================== 公共枚举类型 ====================
+
+/**
+ * @brief 任务执行状态
+ * @note 用于反馈任务执行进度
+ */
+enum TaskStatus {
+    TASK_IDLE      = 0;  // 空闲，无任务
+    TASK_RUNNING   = 1;  // 执行中
+    TASK_COMPLETED = 2;  // 已完成
+    TASK_FAILED    = 3;  // 执行失败
+    TASK_PAUSED    = 4;  // 已暂停
+}
+
+/**
+ * @brief 系统级控制指令类型
+ * @note 最高优先级指令，直接影响车辆运行
+ */
+enum CommandType {
+    CMD_EMERGENCY_STOP = 0;  // 紧急制动（最高优先级）
+    CMD_RESUME         = 1;  // 恢复运行
+    CMD_PAUSE          = 2;  // 暂停
+    CMD_REBOOT         = 3;  // 重启系统
+}
+
+/**
+ * @brief 操作类型（与导航任务配合）
+ * @note 定义到达目标点后的动作
+ */
+enum OperationType {
+    OP_MOVE_ONLY = 0;  // 仅移动到目标点
+    OP_PICK_UP   = 1;  // 到达后执行取货
+    OP_PUT_DOWN  = 2;  // 到达后执行放货
+}
+
+/**
+ * @brief 通用状态码
+ * @note 用于服务器响应的状态标识
+ */
+enum StatusCode {
+    STATUS_OK                = 0;   // 成功
+    STATUS_INVALID_REQUEST   = 1;   // 无效请求
+    STATUS_INTERNAL_ERROR    = 2;   // 内部错误
+    STATUS_TIMEOUT           = 3;   // 超时
+    STATUS_VEHICLE_BUSY      = 4;   // 车辆忙碌
+    STATUS_TASK_NOT_FOUND    = 5;   // 任务不存在
+}
+
+// ==================== 公共消息类型 ====================
+
+/**
+ * @brief 2D 平面坐标点
+ * @note 坐标系：X 正方向为车辆前方，Y 正方向为车辆左侧
+ * @note 单位：米（m）
+ */
+message Point {
+    double x = 1;  // X 坐标（米）
+    double y = 2;  // Y 坐标（米）
+}
+
+/**
+ * @brief 带时间戳的 2D 坐标点
+ * @note 用于轨迹预测
+ */
+message TimedPoint {
+    Point  position  = 1;  // 位置
+    int64  timestamp = 2;  // 时间戳（微秒，自 Epoch）
+}
