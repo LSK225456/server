@@ -1,17 +1,22 @@
 cmake_minimum_required(VERSION 3.10)
 
-# 设置 C++ 标准
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# 添加 Protobuf 子目录
+# ==================== Proto 子模块 ====================
 add_subdirectory(proto)
 
-# 添加 codec 子目录
+# ==================== Codec 子模块 ====================
 add_subdirectory(codec)
 
-# 添加 gateway 子目录
+# ==================== Gateway 子模块 ====================
 add_subdirectory(gateway)
+
+# ==================== AGV Server 集成库（可选）====================
+# 如果需要一个统一的 agv_server 库，可以这样定义：
+# add_library(agv_server INTERFACE)
+# target_link_libraries(agv_server INTERFACE
+#     agv_gateway
+#     agv_codec
+#     agv_proto
+# )
 
 # 链接顺序：gateway -> codec -> proto -> muduo
 

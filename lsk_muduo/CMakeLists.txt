@@ -1,14 +1,8 @@
 # CMakeLists.txt for lsk_muduo
 # 现代化、工业级别的CMake构建配置
 
-cmake_minimum_required(VERSION 3.14)
-
-# 项目定义
-project(lsk_muduo 
-    VERSION 1.0.0
-    DESCRIPTION "A C++11 Muduo Network Library"
-    LANGUAGES CXX
-)
+cmake_minimum_required(VERSION 3.10)
+project(lsk_muduo VERSION 1.0.0 LANGUAGES CXX C)
 
 # 设置C++标准
 set(CMAKE_CXX_STANDARD 11)
@@ -138,6 +132,16 @@ add_subdirectory(test_muduo)
 # 添加 AGV 服务器模块
 add_subdirectory(agv_server)
 
-# 添加子目录
-add_subdirectory(base)
-add_subdirectory(net)
+# ==================== 子目录：muduo 基础库 ====================
+add_subdirectory(muduo/base)
+add_subdirectory(muduo/net)
+
+# ==================== 子目录：AGV 应用层 ====================
+if(EXISTS "${CMAKE_SOURCE_DIR}/agv_server")
+    add_subdirectory(agv_server)
+endif()
+
+# ==================== 子目录：测试 ====================
+if(EXISTS "${CMAKE_SOURCE_DIR}/test_muduo" AND BUILD_TESTS)
+    add_subdirectory(test_muduo)
+endif()

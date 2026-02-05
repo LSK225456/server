@@ -189,6 +189,14 @@ public:
         append(&be16, sizeof(be16));
     }
 
+    /// 读取完整的字符串（指定长度）
+    std::string read(size_t len) {
+        assert(readableBytes() >= len);
+        std::string result(peek(), len);
+        retrieve(len);
+        return result;
+    }
+
     void prependInt16(int16_t x)
     {
         assert(prependableBytes() >= sizeof(int16_t));
