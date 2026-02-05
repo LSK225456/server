@@ -23,7 +23,7 @@
 
 
 
-迭代一：最小可用系统（第1-2周）
+##### 迭代一：最小可用系统（第1-2周）
 目标：跑通"1个模拟客户端连接服务器，发送遥测数据，服务器接收处理并回复"的完整链路。
 
 第1周：协议层与编解码
@@ -37,25 +37,48 @@ Day 5-7：LengthHeaderCodec编解码器
 实现8字节包头（Length + MsgType + Flags）加Protobuf负载的编解码
 编写单元测试验证粘包、拆包、半包场景
 
-第2周：服务端与客户端骨架
-Day 1-2：GatewayServer骨架
-基于 TcpServer 实现最小化GatewayServer
-集成Codec处理消息解码
-onMessage收到Telemetry后打印日志并回复CommonResponse
-Day 3-4：MockAgvClient骨架
-基于 TcpClient 实现单个模拟客户端
-连接成功后发送一条Telemetry，收到Response后打印日志
-这是后续压测模拟器的基础组件
-Day 5-7：端到端联调
-启动Server，运行单个Client，验证完整链路
-添加定时器让Client每20ms发送一次Telemetry（模拟50Hz）
-迭代一验收标准：
-单Client连接Server，50Hz发送Telemetry
-Server接收、解码、打印、回复Response
-Client收到Response并打印
-Buffer和Codec的单元测试全部通过
+第2周：服务端与客户端骨架（双闭环安全版）
+Day 1-2：GatewayServer 骨架（状态与看门狗）
+目标：从“无状态回声”升级为“有状态监管”。
+核心开发：
+基于 TcpServer 实现GatewayServer
+Session 管理：定义 AgvSession 类（包含 agv_id、last_active_time、battery_level）。在 GatewayServer 中维护 std::map<string, AgvSessionPtr>。
+上行看门狗（Server Watchdog）：
+集成 TimerQueue，每 100ms 运行一次检查函数。
+逻辑：遍历 Session Map，若 now - last_active_time > 1000ms，标记该车为 OFFLINE 并打印[ALARM]日志。
+基础业务引擎（Business Engine）：
+在 onMessage 收到遥测数据后，不仅更新 Session，还进行逻辑判断。
+逻辑：if (battery < 20.0 && !is_charging) -> 立即构造 AgvCommand (类型 MSG_NAVIGATION_TASK，目标 "CHARGER") 并下发。
+Day 3-4：MockAgvClient 骨架（智能模拟器）
+目标：从“只会发包的哑巴”升级为“能模拟物理特性的虚拟车”。
+核心开发：
+物理仿真模块：
+维护内部变量 current_battery。启动定时器，每秒自动减少 0.5% 电量（模拟耗电）。
+维护状态机：IDLE (空闲) -> MOVING (移动中) -> E_STOP (急停)。
+下行看门狗（Client Watchdog）：
+维护 last_server_msg_time。
+逻辑：若 1秒 未收到服务器任何指令（包括心跳），自动切换状态为 E_STOP 并打印 [EMERGENCY] Server Lost!。
+指令响应：
+收到 AgvCommand 后，根据类型修改自身状态（如收到充电指令，状态变为 MOVING_TO_CHARGER）。
+Day 5-7：端到端闭环联调
+目标：验证“安全闭环”和“业务闭环”。
+验证场景：
+正常通信：Client 以 50Hz 发送 Telemetry，Server 收到并不回复（除非有指令），只在后台静默更新心跳。
+安全测试（拔网线模拟）：
+杀掉 Client 进程 -> Server 在 1秒内打印 [ALARM] AGV Offline。
+杀掉 Server 进程 -> Client 在 1秒内打印 [EMERGENCY] Server Lost 并停止发送。
+业务测试（低电量触发）：
+观察 Client 电量自然下降。
+当电量跌破 20% 时，Server 自动下发充电指令。
+Client 收到指令，日志显示“Receiving Charge Command, Moving to Charger...”。
+迭代一验收标准（更新后）：
+双向心跳保活：断开任一端，另一端能在 1秒内检测到并报警。
+状态驱动调度：低电量场景能自动触发 Server 下发指令，Client 正确响应指令。
+协议一致性：所有通信均通过 LengthHeaderCodec 和 Protobuf 进行，无解析错误。
 
-迭代二：会话管理与消息分发（第3-4周）
+
+
+##### 迭代二：会话管理与消息分发（第3-4周）
 目标：支持多客户端连接，实现类型安全的消息分发和线程安全的会话管理。
 第3周：消息分发与会话容器
 Day 1-2：ProtobufDispatcher消息分发器
