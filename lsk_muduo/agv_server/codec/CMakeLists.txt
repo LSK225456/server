@@ -1,4 +1,6 @@
-# ==================== Codec 模块 ====================
+# ==================== Codec 编解码模块 ====================
+
+message(STATUS "Configuring Codec module...")
 
 set(CODEC_SRCS
     LengthHeaderCodec.cc
@@ -6,15 +8,14 @@ set(CODEC_SRCS
 
 add_library(agv_codec STATIC ${CODEC_SRCS})
 
-target_link_libraries(agv_codec
-    lsk_muduo_net
-)
-
-# 设置包含目录
 target_include_directories(agv_codec PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}  # 让其他模块能 #include "agv_server/codec/xxx.h"
+    ${CMAKE_SOURCE_DIR}
 )
 
-# 输出日志
+target_link_libraries(agv_codec
+    lsk_muduo_net
+    lsk_muduo_base
+)
+
 message(STATUS "Codec module configured")

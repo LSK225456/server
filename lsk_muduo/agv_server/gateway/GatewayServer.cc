@@ -1,13 +1,23 @@
 #include "GatewayServer.h"
 #include "../../muduo/base/Logger.h"
 #include "../codec/LengthHeaderCodec.h"
-#include <arpa/inet.h>
 
 namespace agv {
 namespace gateway {
 
 using namespace lsk_muduo;
 using namespace agv::codec;
+
+// ==================== 辅助函数 ====================
+
+/**
+ * @brief 计算两个时间戳的差值（秒）
+ * @return 秒数（double 类型）
+ */
+static inline double timeDifference(Timestamp high, Timestamp low) {
+    int64_t diff = high.microSecondsSinceEpoch() - low.microSecondsSinceEpoch();
+    return static_cast<double>(diff) / 1000000.0;
+}
 
 // ==================== 构造与生命周期 ====================
 
@@ -72,6 +82,8 @@ void GatewayServer::onConnection(const TcpConnectionPtr& conn) {
 void GatewayServer::onMessage(const TcpConnectionPtr& conn,
                               Buffer* buf,
                               Timestamp receive_time) {
+    (void)receive_time;  // 暂未使用
+    
     // 循环处理粘包：一个 Buffer 可能包含多个完整消息
     while (LengthHeaderCodec::hasCompleteMessage(buf)) {
         uint16_t msg_type = 0;
@@ -90,40 +102,7 @@ void GatewayServer::onMessage(const TcpConnectionPtr& conn,
     }
 }
 
-// ==================== 协议解析实现 ====================
-
-// bool GatewayServer::parseHeader(Buffer* buf, uint16_t* msg_type, uint32_t* payload_len) {
-//     if (buf->readableBytes() < 8) {
-//         return false;  // 数据不足
-//     }
-//     
-//     // 包头格式：| Length(4B) | MsgType(2B) | Flags(2B) |
-//     // 注意：不要提前消费数据，先验证完整性
-//     
-//     // 1. 读取总长度（网络字节序已由 peekInt32 自动转换）
-//     uint32_t total_len = static_cast<uint32_t>(buf->peekInt32());
-//     
-//     // 2. 校验合法性
-//     if (total_len < 8 || total_len > 10 * 1024 * 1024) {  // 限制最大 10MB
-//         LOG_ERROR << "Invalid message: total_len=" << total_len;
-//         buf->retrieveAll();  // 丢弃所有数据，避免死循环
-//         return false;
-//     }
-//     
-//     // 3. 计算 Protobuf 负载长度
-//     *payload_len = total_len - 8;
-//     
-//     // 4. 消费 Length 字段（4 字节）
-//     buf->retrieve(4);
-//     
-//     // 5. 读取 MsgType（2 字节，网络字节序）
-//     *msg_type = static_cast<uint16_t>(buf->readInt16());
-//     
-//     // 6. 跳过 Flags（2 字节）
-//     buf->retrieve(2);
-//     
-//     return true;
-// }
+// ==================== Protobuf 消息处理 ====================
 
 void GatewayServer::handleProtobufMessage(const TcpConnectionPtr& conn,
                                           uint16_t msg_type,
@@ -156,117 +135,125 @@ void GatewayServer::handleProtobufMessage(const TcpConnectionPtr& conn,
 }
 
 // ==================== 业务处理实现 ====================
-    session->updateActiveTime();
+
 void GatewayServer::handleTelemetry(const TcpConnectionPtr& conn,
-                                    const proto::AgvTelemetry& msg) {())
+                                    const proto::AgvTelemetry& msg) {
     const std::string& agv_id = msg.agv_id();
-    // 3. 触发基础业务引擎
-    // 1. 查找或创建会话ryAndCharge(session, conn);
+    
+    // 1. 查找或创建会话
     AgvSessionPtr session = findSession(agv_id);
-    if (!session) {环境可关闭）
-        registerSession(agv_id, conn); << agv_id << "] battery=" << msg.battery() << "%";
+    if (!session) {
+        registerSession(agv_id, conn);
         session = findSession(agv_id);
     }
-     GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
-    // 2. 更新会话状态                    const proto::Heartbeat& msg) {
-    session->updateActiveTime();msg.agv_id();
+    
+    if (!session) {
+        LOG_ERROR << "Failed to create session for AGV [" << agv_id << "]";
+        return;
+    }
+    
+    // 2. 更新会话状态
+    session->updateActiveTime();
     session->updateBatteryLevel(msg.battery());
     session->updatePose(msg.x(), msg.y(), msg.theta(), msg.confidence());
-    AgvSessionPtr session = findSession(agv_id);
-    // 3. 触发基础业务引擎{
+    
+    // 3. 触发基础业务引擎
     checkLowBatteryAndCharge(session, conn);
-        session = findSession(agv_id);
-    // 调试日志（高频消息，生产环境可关闭）
-    // LOG_DEBUG << "Telemetry from [" << agv_id << "] battery=" << msg.battery() << "%";
-}   // 刷新活跃时间
-    session->updateActiveTime();
+}
+
 void GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
                                     const proto::Heartbeat& msg) {
     const std::string& agv_id = msg.agv_id();
-    =================== 会话管理实现 ====================
+    
     // 查找或创建会话
-    AgvSessionPtr session = findSession(agv_id);tring& agv_id,
-    if (!session) {                 const TcpConnectionPtr& conn) {
-        registerSession(agv_id, conn);_);
+    AgvSessionPtr session = findSession(agv_id);
+    if (!session) {
+        registerSession(agv_id, conn);
         session = findSession(agv_id);
-    }f (sessions_.find(agv_id) != sessions_.end()) {
-        LOG_WARN << "Session [" << agv_id << "] already exists, replacing";
+    }
+    
+    if (!session) {
+        LOG_ERROR << "Failed to create session for AGV [" << agv_id << "]";
+        return;
+    }
+    
     // 刷新活跃时间
     session->updateActiveTime();
-    LOG_DEBUG << "Heartbeat from [" << agv_id << "]";agv_id);
-}   connections_[agv_id] = conn;
-    
-// ==================== 会话管理实现 ====================< "] from "
-             << conn->peerAddress().toIpPort();
+    LOG_DEBUG << "Heartbeat from [" << agv_id << "]";
+}
+
+// ==================== 会话管理实现 ====================
+
 void GatewayServer::registerSession(const std::string& agv_id,
                                     const TcpConnectionPtr& conn) {
-    MutexLockGuard lock(sessions_mutex_);td::string& agv_id) {
     MutexLockGuard lock(sessions_mutex_);
+    
     if (sessions_.find(agv_id) != sessions_.end()) {
         LOG_WARN << "Session [" << agv_id << "] already exists, replacing";
     }
     
-    sessions_[agv_id] = std::make_shared<AgvSession>(agv_id);gv_id) {
-    connections_[agv_id] = conn;_mutex_);
-    auto it = sessions_.find(agv_id);
+    sessions_[agv_id] = std::make_shared<AgvSession>(agv_id);
+    connections_[agv_id] = conn;
+    
     LOG_INFO << "Session registered: [" << agv_id << "] from "
              << conn->peerAddress().toIpPort();
 }
-// ==================== 上行看门狗实现 ====================
+
 void GatewayServer::removeSession(const std::string& agv_id) {
     MutexLockGuard lock(sessions_mutex_);
-    sessions_.erase(agv_id);p::now();
+    sessions_.erase(agv_id);
     connections_.erase(agv_id);
-}   MutexLockGuard lock(sessions_mutex_);
-    for (auto& pair : sessions_) {
+    LOG_INFO << "Session removed: [" << agv_id << "]";
+}
+
 AgvSessionPtr GatewayServer::findSession(const std::string& agv_id) {
-    MutexLockGuard lock(sessions_mutex_);nd;
+    MutexLockGuard lock(sessions_mutex_);
     auto it = sessions_.find(agv_id);
     return (it != sessions_.end()) ? it->second : nullptr;
-}       double elapsed_sec = timeDifference(now, session->getLastActiveTime());
+}
+
+// ==================== 上行看门狗实现 ====================
+
+void GatewayServer::onWatchdogTimer() {
+    Timestamp now = Timestamp::now();
+    
+    MutexLockGuard lock(sessions_mutex_);
+    for (auto& pair : sessions_) {
+        const std::string& agv_id = pair.first;
+        AgvSessionPtr session = pair.second;
+        
+        // 计算距离最后活跃时间的间隔（毫秒）
+        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
         int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
         
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
+        // 超时检测
         if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
             session->setState(AgvSession::OFFLINE);
             LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
                       << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
+        }
     }
+}
+
+// ==================== 基础业务引擎实现 ====================
+
 void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
                                              const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
+    double battery = session->getBatteryLevel();
     AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
+    
+    // 触发条件：电量 < 20% 且未在充电
+    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {
         LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
                  << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
+        
+        sendChargeCommand(session->getAgvId(), conn);
         session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
     }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
+}
+
 // ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
+
 void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
                                         uint16_t msg_type,
                                         const google::protobuf::Message& message) {
@@ -288,1394 +275,20 @@ void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
     conn->send(&buf);
 }
 
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
+void GatewayServer::sendChargeCommand(const std::string& agv_id,
+                                      const TcpConnectionPtr& conn) {
+    proto::AgvCommand cmd;
+    cmd.set_target_agv_id(agv_id);
+    cmd.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+    cmd.set_cmd_type(proto::CMD_EMERGENCY_STOP);  // 简化：暂用 EMERGENCY_STOP
     
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
+    // 注意：按原文档，应下发 NavigationTask（目标 "CHARGER"）
+    // 迭代三完善：发送完整的导航任务
     
-    // 3. 发送
-    conn->send(&buf);
+    sendProtobufMessage(conn, proto::MSG_AGV_COMMAND, cmd);
+    
+    LOG_INFO << "[SEND] Charge command to [" << agv_id << "]";
 }
 
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-    MutexLockGuard lock(sessions_mutex_);s > " << kSessionTimeoutMs << "ms)";
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
-        // 计算距离最后活跃时间的间隔（毫秒）引擎实现 ====================
-        double elapsed_sec = timeDifference(now, session->getLastActiveTime());
-        int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);ion,
-                                             const TcpConnectionPtr& conn) {
-        // 超时检测ery = session->getBatteryLevel();
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
-            session->setState(AgvSession::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
-        }OG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-    }            << "] LOW BATTERY (" << battery << "%), sending charge command";
-}       
-        sendChargeCommand(session->getAgvId(), conn);
-// ==================== 基础业务引擎实现 ====================标记为充电中，避免重复下发
-    }
-void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                             const TcpConnectionPtr& conn) {
-    double battery = session->getBatteryLevel();===
-    AgvSession::State state = session->getState();
-     GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-    // 触发条件：电量 < 20% 且未在充电              uint16_t msg_type,
-    if (battery < kLowBatteryThreshold && state != AgvSession::CHARGING) {essage) {
-        LOG_WARN << "[BUSINESS ENGINE] AGV [" << session->getAgvId()
-                 << "] LOW BATTERY (" << battery << "%), sending charge command";
-        !message.SerializeToString(&payload)) {
-        sendChargeCommand(session->getAgvId(), conn);ssage";
-        session->setState(AgvSession::CHARGING);  // 标记为充电中，避免重复下发
-    }
-}   
-    // 2. 使用 LengthHeaderCodec 编码
-// ==================== 消息发送实现 ====================
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
-                                        uint16_t msg_type,
-                                        const google::protobuf::Message& message) {
-    // 1. 序列化 Protobuf
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-        LOG_ERROR << "Failed to serialize protobuf message";
-        return;
-    }
-    
-    // 2. 使用 LengthHeaderCodec 编码
-    Buffer buf;
-    if (!LengthHeaderCodec::encode(&buf, msg_type, payload)) {
-        LOG_ERROR << "Failed to encode message";
-        return;
-    }
-    
-    // 3. 发送
-    conn->send(&buf);
-}
-
-// ==================== 上行看门狗实现 ====================
-        // 超时检测
-void GatewayServer::onWatchdogTimer() {tMs && session->getState() == AgvSession::ONLINE) {
-    Timestamp now = Timestamp::now();ion::OFFLINE);
-            LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
+}  // namespace gateway
+}  // namespace agv

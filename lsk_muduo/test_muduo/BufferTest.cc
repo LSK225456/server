@@ -4,6 +4,8 @@
 #include <vector>
 #include <climits>
 
+using namespace lsk_muduo;
+
 /**
  * 测试套件：Buffer 整数操作
  * 覆盖场景：
@@ -219,6 +221,78 @@ TEST_F(BufferIntegerTest, ReadInt32_InsufficientData_AssertsInDebug) {
     
     // 在 Debug 模式下应该触发 assert
     EXPECT_DEATH(buffer.readInt32(), "Assertion.*failed");
+}
+
+// ==================== 测试基本读写 ====================
+
+/**
+ * 测试目标：测试 Buffer 的基本读写功能
+ */
+TEST(BufferTest, BasicReadWrite) {
+    Buffer buf;
+    EXPECT_EQ(buf.readableBytes(), 0u);
+    
+    buf.append("hello", 5);
+    EXPECT_EQ(buf.readableBytes(), 5u);
+    
+    std::string s = buf.retrieveAsString(5);
+    EXPECT_EQ(s, "hello");
+    EXPECT_EQ(buf.readableBytes(), 0u);
+}
+
+// ==================== 测试整数读写（网络字节序） ====================
+
+/**
+ * 测试目标：测试整数的读写功能（网络字节序）
+ */
+TEST(BufferTest, IntegerReadWrite) {
+    Buffer buf;
+    
+    // 测试 Int32
+    buf.appendInt32(0x12345678);
+    EXPECT_EQ(buf.readableBytes(), 4u);
+    EXPECT_EQ(buf.readInt32(), 0x12345678);
+    EXPECT_EQ(buf.readableBytes(), 0u);
+    
+    // 测试 Int16
+    buf.appendInt16(0x1234);
+    EXPECT_EQ(buf.readableBytes(), 2u);
+    EXPECT_EQ(buf.readInt16(), 0x1234);
+    EXPECT_EQ(buf.readableBytes(), 0u);
+}
+
+// ==================== 测试 peek 不消费数据 ====================
+
+/**
+ * 测试目标：测试 peek 不消费数据
+ */
+TEST(BufferTest, PeekDoesNotConsume) {
+    Buffer buf;
+    buf.appendInt32(0xAABBCCDD);
+    
+    EXPECT_EQ(buf.peekInt32(), static_cast<int32_t>(0xAABBCCDD));
+    EXPECT_EQ(buf.readableBytes(), 4u);  // 未消费
+    
+    EXPECT_EQ(buf.readInt32(), static_cast<int32_t>(0xAABBCCDD));
+    EXPECT_EQ(buf.readableBytes(), 0u);  // 已消费
+}
+
+// ==================== 测试粘包场景 ====================
+
+/**
+ * 测试目标：测试粘包场景
+ */
+TEST(BufferTest, MultipleMessages) {
+    Buffer buf;
+    
+    // 写入两条消息
+    buf.appendInt32(100);
+    buf.appendInt32(200);
+    
+    EXPECT_EQ(buf.readableBytes(), 8u);
+    EXPECT_EQ(buf.readInt32(), 100);
+    EXPECT_EQ(buf.readInt32(), 200);
+    EXPECT_EQ(buf.readableBytes(), 0u);
 }
 
 // ==================== 主函数 ====================

@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 
+# ==================== AGV Server 模块 ====================
+# 该模块包含：proto（协议）、codec（编解码）、gateway（网关）
+
+message(STATUS "Configuring AGV Server module...")
+
 # ==================== Proto 子模块 ====================
 add_subdirectory(proto)
 
@@ -62,4 +67,4 @@ target_link_libraries(gateway_main
 # 安装到 bin 目录
 install(TARGETS gateway_main DESTINATION ${PROJECT_SOURCE_DIR}/bin)
 
-message(STATUS "AGV Server module configured")
+message(STATUS "AGV Server module configured successfully!")

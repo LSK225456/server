@@ -87,3 +87,79 @@ add_test(NAME GatewayServerTest COMMAND gateway_test)
 
 # 安装到 bin 目录
 install(TARGETS gateway_test DESTINATION ${PROJECT_SOURCE_DIR}/bin)
+
+# ==================== 测试模块 ====================
+
+message(STATUS "Configuring Test module...")
+
+# 包含目录
+include_directories(
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}/agv_server/proto
+    ${GTEST_INCLUDE_DIRS}
+)
+
+# ==================== Buffer 测试 ====================
+add_executable(buffer_test BufferTest.cc)
+target_link_libraries(buffer_test
+    lsk_muduo_net
+    lsk_muduo_base
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
+)
+set_target_properties(buffer_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
+add_test(NAME BufferTest COMMAND buffer_test)
+
+# ==================== Codec 测试 ====================
+add_executable(codec_test CodecTest.cc)
+target_link_libraries(codec_test
+    agv_codec
+    agv_proto
+    lsk_muduo_net
+    lsk_muduo_base
+    ${PROTOBUF_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
+)
+set_target_properties(codec_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
+add_test(NAME CodecTest COMMAND codec_test)
+
+# ==================== Proto 测试 ====================
+add_executable(proto_test ProtoTest.cc)
+target_link_libraries(proto_test
+    agv_proto
+    ${PROTOBUF_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
+)
+set_target_properties(proto_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
+add_test(NAME ProtoTest COMMAND proto_test)
+
+# ==================== Gateway 测试 ====================
+add_executable(gateway_test gateway_test.cc)
+target_link_libraries(gateway_test
+    agv_gateway
+    agv_codec
+    agv_proto
+    lsk_muduo_net
+    lsk_muduo_base
+    ${PROTOBUF_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
+)
+set_target_properties(gateway_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
+add_test(NAME GatewayTest COMMAND gateway_test)
+
+message(STATUS "Test module configured")
+message(STATUS "  - buffer_test")
+message(STATUS "  - codec_test")
+message(STATUS "  - proto_test")
+message(STATUS "  - gateway_test")

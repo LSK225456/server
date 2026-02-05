@@ -8,10 +8,15 @@
 #include "../muduo/base/Logger.h"
 #include <iostream>
 #include <memory>
+#include <gtest/gtest.h>
+#include "agv_server/gateway/AgvSession.h"
+#include "agv_server/gateway/GatewayServer.h"
+#include "muduo/base/Timestamp.h"
 
 using namespace agv::gateway;
 using namespace agv::proto;
 using namespace agv::codec;
+using namespace lsk_muduo;
 
 /**
  * @brief 模拟 AGV 客户端
@@ -185,6 +190,93 @@ void testWatchdogTimeout() {
 
     loop.loop();
     std::cout << "Test 3 passed (check server logs for WATCHDOG ALARM)" << std::endl;
+}
+
+// ==================== AgvSession 单元测试 ====================
+
+TEST(AgvSessionTest, Construction) {
+    AgvSession session("AGV001");
+    
+    EXPECT_EQ(session.getAgvId(), "AGV001");
+    EXPECT_EQ(session.getState(), AgvSession::ONLINE);
+    EXPECT_DOUBLE_EQ(session.getBatteryLevel(), 100.0);
+}
+
+TEST(AgvSessionTest, UpdateBattery) {
+    AgvSession session("AGV002");
+    
+    session.updateBatteryLevel(50.0);
+    EXPECT_DOUBLE_EQ(session.getBatteryLevel(), 50.0);
+    
+    session.updateBatteryLevel(20.0);
+    EXPECT_DOUBLE_EQ(session.getBatteryLevel(), 20.0);
+}
+
+TEST(AgvSessionTest, UpdatePose) {
+    AgvSession session("AGV003");
+    
+    session.updatePose(1.0, 2.0, 0.5, 0.95);
+    
+    auto pose = session.getPose();
+    EXPECT_DOUBLE_EQ(pose.x, 1.0);
+    EXPECT_DOUBLE_EQ(pose.y, 2.0);
+    EXPECT_DOUBLE_EQ(pose.theta, 0.5);
+    EXPECT_DOUBLE_EQ(pose.confidence, 0.95);
+}
+
+TEST(AgvSessionTest, StateTransition) {
+    AgvSession session("AGV004");
+    
+    EXPECT_EQ(session.getState(), AgvSession::ONLINE);
+    
+    session.setState(AgvSession::CHARGING);
+    EXPECT_EQ(session.getState(), AgvSession::CHARGING);
+    
+    session.setState(AgvSession::OFFLINE);
+    EXPECT_EQ(session.getState(), AgvSession::OFFLINE);
+}
+
+TEST(AgvSessionTest, ActiveTimeUpdate) {
+    AgvSession session("AGV005");
+    
+    Timestamp t1 = session.getLastActiveTime();
+    
+    // 等待一小段时间
+    usleep(1000);  // 1ms
+    
+    session.updateActiveTime();
+    Timestamp t2 = session.getLastActiveTime();
+    
+    // t2 应该比 t1 晚
+    EXPECT_GT(t2.microSecondsSinceEpoch(), t1.microSecondsSinceEpoch());
+}
+
+// ==================== 线程安全测试 ====================
+
+TEST(AgvSessionTest, ThreadSafety) {
+    AgvSession session("AGV006");
+    
+    // 简单的并发读写测试
+    std::thread writer([&session]() {
+        for (int i = 0; i < 1000; ++i) {
+            session.updateBatteryLevel(static_cast<double>(i % 100));
+            session.updateActiveTime();
+        }
+    });
+    
+    std::thread reader([&session]() {
+        for (int i = 0; i < 1000; ++i) {
+            (void)session.getBatteryLevel();
+            (void)session.getLastActiveTime();
+            (void)session.getState();
+        }
+    });
+    
+    writer.join();
+    reader.join();
+    
+    // 如果没有崩溃，说明线程安全
+    SUCCEED();
 }
 
 int main() {
