@@ -9,6 +9,7 @@
 #include "../proto/message.pb.h"
 #include "../proto/common.pb.h"
 #include "../proto/message_id.h"
+#include "../codec/LengthHeaderCodec.h"
 #include <map>
 #include <memory>
 #include <functional>
@@ -90,17 +91,7 @@ private:
 
     // ==================== 协议解析（LengthHeader + Protobuf）====================
     
-    /**
-     * @brief 解析 8 字节包头
-     * @param buf 缓冲区
-     * @param msg_type [out] 消息类型（来自 message_id.h）
-     * @param payload_len [out] Protobuf 负载长度
-     * @return true=解析成功，false=数据不足
-     * 
-     * @note 包头格式：| Length(4B) | MsgType(2B) | Flags(2B) |
-     * @note Length 包含整个消息长度（8 + payload）
-     */
-    bool parseHeader(Buffer* buf, uint16_t* msg_type, uint32_t* payload_len);
+    // bool parseHeader(Buffer* buf, uint16_t* msg_type, uint32_t* payload_len);  // 删除这行
 
     /**
      * @brief 处理 Protobuf 消息

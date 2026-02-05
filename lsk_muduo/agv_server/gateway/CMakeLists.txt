@@ -5,8 +5,11 @@ set(GATEWAY_SRCS
     GatewayServer.cc
 )
 
-add_library(agv_gateway ${GATEWAY_SRCS})
+add_library(agv_gateway STATIC ${GATEWAY_SRCS})
+
 target_link_libraries(agv_gateway
+    agv_codec
+    agv_proto
     lsk_muduo
     ${PROTOBUF_LIBRARIES}
 )
@@ -14,8 +17,11 @@ target_link_libraries(agv_gateway
 # ==================== Gateway 主程序 ====================
 
 add_executable(gateway_main gateway_main.cc)
+
 target_link_libraries(gateway_main
     agv_gateway
+    agv_codec
+    agv_proto
     lsk_muduo
     ${PROTOBUF_LIBRARIES}
     pthread

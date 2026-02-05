@@ -7,10 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 添加 Protobuf 子目录
 add_subdirectory(proto)
 
-# 后续迭代会添加 codec、server、client 等子目录
-# add_subdirectory(codec)
-# add_subdirectory(server)
-# add_subdirectory(client)
+# 添加 codec 子目录
+add_subdirectory(codec)
+
+# 添加 gateway 子目录
+add_subdirectory(gateway)
+
+# 链接顺序：gateway -> codec -> proto -> muduo
 
 # ==================== Gateway 子目录 ====================
 add_subdirectory(gateway)

@@ -168,28 +168,25 @@ public:
         append(str.data(), str.size());
     }
 
-    /**
-     * @brief 16 位整数操作（扩展）
-     */
-    int16_t peekInt16() const
-    {
-        assert(readableBytes() >= sizeof(int16_t));
-        int16_t be16 = 0;
-        ::memcpy(&be16, peek(), sizeof(int16_t));  // 使用 ::memcpy 而不是 std::memcpy
-        return be16toh(be16);
-    }
-
-    int16_t readInt16()
-    {
+    /// 读取 16 位整数（网络字节序 -> 主机字节序）
+    int16_t readInt16() {
         int16_t result = peekInt16();
         retrieve(sizeof(int16_t));
         return result;
     }
 
-    void appendInt16(int16_t x)
-    {
-        int16_t be16 = htobe16(x);
-        append(reinterpret_cast<const char*>(&be16), sizeof(be16));
+    /// 查看 16 位整数但不消费（从当前读指针位置）
+    int16_t peekInt16() const {
+        assert(readableBytes() >= sizeof(int16_t));
+        int16_t be16 = 0;
+        ::memcpy(&be16, peek(), sizeof(be16));
+        return networkToHost16(be16);
+    }
+
+    /// 追加 16 位整数（主机字节序 -> 网络字节序）
+    void appendInt16(int16_t x) {
+        int16_t be16 = hostToNetwork16(x);
+        append(&be16, sizeof(be16));
     }
 
     void prependInt16(int16_t x)

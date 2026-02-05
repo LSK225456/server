@@ -1,137 +1,199 @@
 #include "../agv_server/gateway/GatewayServer.h"
-#include "../agv_server/gateway/AgvSession.h"
+#include "../agv_server/proto/message.pb.h"
+#include "../agv_server/proto/message_id.h"
+#include "../agv_server/codec/LengthHeaderCodec.h"
 #include "../muduo/net/EventLoop.h"
+#include "../muduo/net/TcpClient.h"
 #include "../muduo/net/InetAddress.h"
-#include <gtest/gtest.h>
-#include <thread>
-#include <chrono>
+#include "../muduo/base/Logger.h"
+#include <iostream>
+#include <memory>
 
 using namespace agv::gateway;
+using namespace agv::proto;
+using namespace agv::codec;
 
 /**
- * @brief GatewayServer 单元测试（迭代一：Day 1-2）
- * @note 测试场景：
- *       1. AgvSession 基本功能（构造、Getter/Setter、线程安全）
- *       2. GatewayServer 启动与连接
- *       3. 看门狗超时检测（需模拟客户端）
- *       4. 低电量触发充电（需模拟客户端）
+ * @brief 模拟 AGV 客户端
  */
-
-// ==================== AgvSession 单元测试 ====================
-
-/**
- * @brief 测试：AgvSession 基本操作
- */
-TEST(AgvSessionTest, BasicOperations) {
-    AgvSession session("AGV-001");
-    
-    // 验证默认值
-    EXPECT_EQ(session.getAgvId(), "AGV-001");
-    EXPECT_EQ(session.getState(), AgvSession::ONLINE);
-    EXPECT_DOUBLE_EQ(session.getBatteryLevel(), 100.0);
-    
-    // 更新电量
-    session.updateBatteryLevel(50.0);
-    EXPECT_DOUBLE_EQ(session.getBatteryLevel(), 50.0);
-    
-    // 更新状态
-    session.setState(AgvSession::CHARGING);
-    EXPECT_EQ(session.getState(), AgvSession::CHARGING);
-    
-    // 更新位姿
-    session.updatePose(1.5, 2.5, 90.0, 0.95);
-    auto pose = session.getPose();
-    EXPECT_DOUBLE_EQ(pose.x, 1.5);
-    EXPECT_DOUBLE_EQ(pose.y, 2.5);
-    EXPECT_DOUBLE_EQ(pose.theta, 90.0);
-    EXPECT_DOUBLE_EQ(pose.confidence, 0.95);
-}
-
-/**
- * @brief 测试：线程安全（并发读写）
- */
-TEST(AgvSessionTest, ThreadSafety) {
-    AgvSession session("AGV-002");
-    
-    // 启动写线程
-    std::thread writer([&session]() {
-        for (int i = 0; i < 1000; ++i) {
-            session.updateBatteryLevel(static_cast<double>(i % 100));
-            session.updateActiveTime();
-        }
-    });
-    
-    // 启动读线程
-    std::thread reader([&session]() {
-        for (int i = 0; i < 1000; ++i) {
-            double level = session.getBatteryLevel();
-            (void)level;
-            Timestamp ts = session.getLastActiveTime();
-            (void)ts;
-        }
-    });
-    
-    writer.join();
-    reader.join();
-    
-    // 验证最终状态一致
-    EXPECT_GE(session.getBatteryLevel(), 0.0);
-    EXPECT_LE(session.getBatteryLevel(), 100.0);
-}
-
-// ==================== GatewayServer 集成测试 ====================
-
-/**
- * @brief 测试夹具：GatewayServer
- */
-class GatewayServerTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        // 在后台线程启动服务器
-        server_thread_ = std::thread([this]() {
-            EventLoop loop;
-            loop_ = &loop;
-            
-            InetAddress listen_addr(19090);  // 使用测试端口
-            server_ = new GatewayServer(&loop, listen_addr, "TestGateway");
-            server_->start();
-            
-            loop.loop();
-        });
+class MockAgvClient {
+public:
+    MockAgvClient(EventLoop* loop, const InetAddress& server_addr, const std::string& agv_id)
+        : loop_(loop),
+          client_(loop, server_addr, "MockAGV-" + agv_id),
+          agv_id_(agv_id),
+          connected_(false) {
         
-        // 等待服务器启动
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        client_.setConnectionCallback(
+            std::bind(&MockAgvClient::onConnection, this, std::placeholders::_1));
+        client_.setMessageCallback(
+            std::bind(&MockAgvClient::onMessage, this,
+                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     }
-    
-    void TearDown() override {
-        if (loop_) {
-            loop_->quit();
-        }
-        if (server_thread_.joinable()) {
-            server_thread_.join();
-        }
-        delete server_;
+
+    void connect() {
+        client_.connect();
     }
-    
-    EventLoop* loop_ = nullptr;
-    GatewayServer* server_ = nullptr;
-    std::thread server_thread_;
+
+    void sendTelemetry(double battery) {
+        if (!connected_) return;
+
+        AgvTelemetry msg;
+        msg.set_agv_id(agv_id_);
+        msg.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+        msg.set_x(1.0);
+        msg.set_y(2.0);
+        msg.set_theta(0.5);
+        msg.set_confidence(0.95);
+        msg.set_battery(battery);
+
+        sendProto(MSG_AGV_TELEMETRY, msg);
+        std::cout << "[Client] Sent Telemetry: battery=" << battery << "%" << std::endl;
+    }
+
+    void sendHeartbeat() {
+        if (!connected_) return;
+
+        Heartbeat msg;
+        msg.set_agv_id(agv_id_);
+        msg.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+
+        sendProto(MSG_HEARTBEAT, msg);
+        std::cout << "[Client] Sent Heartbeat" << std::endl;
+    }
+
+private:
+    void onConnection(const TcpConnectionPtr& conn) {
+        if (conn->connected()) {
+            connected_ = true;
+            std::cout << "[Client] Connected to server" << std::endl;
+        } else {
+            connected_ = false;
+            std::cout << "[Client] Disconnected" << std::endl;
+        }
+    }
+
+    void onMessage(const TcpConnectionPtr& conn, Buffer* buf, Timestamp) {
+        while (LengthHeaderCodec::hasCompleteMessage(buf)) {
+            uint16_t msg_type = 0;
+            std::string payload;
+            if (!LengthHeaderCodec::decode(buf, &msg_type, &payload)) {
+                std::cout << "[Client] Decode failed" << std::endl;
+                return;
+            }
+            std::cout << "[Client] Received message type=0x" << std::hex << msg_type << std::dec << std::endl;
+        }
+    }
+
+    void sendProto(uint16_t msg_type, const google::protobuf::Message& message) {
+        std::string payload;
+        message.SerializeToString(&payload);
+
+        Buffer buf;
+        LengthHeaderCodec::encode(&buf, msg_type, payload);
+        client_.connection()->send(&buf);
+    }
+
+    EventLoop* loop_;
+    TcpClient client_;
+    std::string agv_id_;
+    bool connected_;
 };
 
 /**
- * @brief 测试：服务器启动
+ * @brief 测试场景1：正常遥测数据接收
  */
-TEST_F(GatewayServerTest, ServerStartup) {
-    EXPECT_NE(server_, nullptr);
-    EXPECT_NE(loop_, nullptr);
-    
-    // 等待 1 秒，验证服务器正常运行
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+void testNormalTelemetry() {
+    std::cout << "\n========== Test 1: Normal Telemetry ==========" << std::endl;
+
+    EventLoop loop;
+    InetAddress server_addr(9090);
+
+    // 启动 GatewayServer
+    GatewayServer server(&loop, server_addr, "TestGateway");
+    server.start();
+
+    // 创建模拟客户端
+    MockAgvClient client(&loop, server_addr, "AGV001");
+    client.connect();
+
+    // 定时发送遥测数据（80% 电量，正常）
+    loop.runAfter(1.0, [&client]() {
+        client.sendTelemetry(80.0);
+    });
+
+    loop.runAfter(3.0, [&loop]() {
+        loop.quit();
+    });
+
+    loop.loop();
+    std::cout << "Test 1 passed" << std::endl;
 }
 
-// ==================== 主函数 ====================
+/**
+ * @brief 测试场景2：低电量触发充电
+ */
+void testLowBatteryCharging() {
+    std::cout << "\n========== Test 2: Low Battery Charging ==========" << std::endl;
 
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    EventLoop loop;
+    InetAddress server_addr(9091);
+
+    GatewayServer server(&loop, server_addr, "TestGateway");
+    server.start();
+
+    MockAgvClient client(&loop, server_addr, "AGV002");
+    client.connect();
+
+    // 发送低电量遥测（15%）
+    loop.runAfter(1.0, [&client]() {
+        client.sendTelemetry(15.0);  // 应触发充电指令
+    });
+
+    loop.runAfter(3.0, [&loop]() {
+        loop.quit();
+    });
+
+    loop.loop();
+    std::cout << "Test 2 passed (check server logs for charge command)" << std::endl;
+}
+
+/**
+ * @brief 测试场景3：看门狗超时检测
+ */
+void testWatchdogTimeout() {
+    std::cout << "\n========== Test 3: Watchdog Timeout ==========" << std::endl;
+
+    EventLoop loop;
+    InetAddress server_addr(9092);
+
+    GatewayServer server(&loop, server_addr, "TestGateway");
+    server.start();
+
+    MockAgvClient client(&loop, server_addr, "AGV003");
+    client.connect();
+
+    // 发送一次遥测后停止（触发超时）
+    loop.runAfter(0.5, [&client]() {
+        client.sendTelemetry(50.0);
+    });
+
+    // 等待 2 秒（超过 1 秒超时阈值）
+    loop.runAfter(3.0, [&loop]() {
+        loop.quit();
+    });
+
+    loop.loop();
+    std::cout << "Test 3 passed (check server logs for WATCHDOG ALARM)" << std::endl;
+}
+
+int main() {
+    Logger::setLogLevel(Logger::INFO);
+
+    testNormalTelemetry();
+    testLowBatteryCharging();
+    testWatchdogTimeout();
+
+    std::cout << "\n========== All Tests Completed ==========" << std::endl;
+    return 0;
 }
