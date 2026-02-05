@@ -70,3 +70,20 @@ set_target_properties(codec_test PROPERTIES
 enable_testing()
 add_test(NAME proto_test COMMAND proto_test)
 add_test(NAME codec_test COMMAND codec_test)
+
+# ==================== 单元测试 ====================
+add_executable(gateway_test gateway_test.cc)
+target_link_libraries(gateway_test
+    agv_server
+    lsk_net
+    lsk_base
+    ${PROTOBUF_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
+    pthread
+)
+
+# 添加到 CTest
+add_test(NAME GatewayServerTest COMMAND gateway_test)
+
+# 安装到 bin 目录
+install(TARGETS gateway_test DESTINATION ${PROJECT_SOURCE_DIR}/bin)

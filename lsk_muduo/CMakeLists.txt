@@ -137,3 +137,7 @@ add_subdirectory(test_muduo)
 
 # 添加 AGV 服务器模块
 add_subdirectory(agv_server)
+
+# 添加子目录
+add_subdirectory(base)
+add_subdirectory(net)
