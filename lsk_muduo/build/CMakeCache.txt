@@ -259,15 +259,6 @@ GTEST_MAIN_LIBRARY_DEBUG:FILEPATH=GTEST_MAIN_LIBRARY_DEBUG-NOTFOUND
 //The directory containing a CMake configuration file for GTest.
 GTest_DIR:PATH=GTest_DIR-NOTFOUND
 
-//Value Computed by CMake
-MuduoProtoTest_BINARY_DIR:STATIC=/home/lsk/server/server/lsk_muduo/build/test_muduo
-
-//Value Computed by CMake
-MuduoProtoTest_IS_TOP_LEVEL:STATIC=OFF
-
-//Value Computed by CMake
-MuduoProtoTest_SOURCE_DIR:STATIC=/home/lsk/server/server/lsk_muduo/test_muduo
-
 //Path to a file.
 Protobuf_INCLUDE_DIR:PATH=/usr/include
 

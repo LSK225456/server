@@ -10,9 +10,12 @@
 #include <string>
 #include <atomic>
 
+namespace lsk_muduo {
+
 class Channel;
 class EventLoop;
 class Socket;
+
 
 class TcpConnection : noncopyable, public std::enable_shared_from_this<TcpConnection>
 {
@@ -122,3 +125,4 @@ private:
     Buffer inputBuffer_;
     Buffer outputBuffer_;
 };
+} // namespace lsk_muduo

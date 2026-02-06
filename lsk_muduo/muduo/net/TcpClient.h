@@ -8,7 +8,7 @@
 #include <string>
 #include <mutex>
 #include <atomic>
-
+namespace lsk_muduo {
 class Connector;
 class EventLoop;
 
@@ -68,3 +68,5 @@ private:
     mutable std::mutex mutex_;
     TcpConnectionPtr connection_;  // 当前连接
 };
+
+} // namespace lsk_muduo

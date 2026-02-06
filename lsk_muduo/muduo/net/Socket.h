@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../base/noncopyable.h"
-
+namespace lsk_muduo {
 class InetAddress;
 
 class Socket : noncopyable
@@ -28,3 +28,5 @@ public:
 private:
     const int sockfd_;
 };
+
+}

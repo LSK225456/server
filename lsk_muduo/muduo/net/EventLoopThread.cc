@@ -1,6 +1,8 @@
 #include "EventLoopThread.h"
 #include "EventLoop.h"
 
+namespace lsk_muduo {  // 添加命名空间
+
 EventLoopThread::EventLoopThread(const ThreadInitCallback &cb,
     const std::string &name)
     : loop_(nullptr)
@@ -59,3 +61,5 @@ void EventLoopThread::threadFunc()
     std::unique_lock<std::mutex> lock(mutex_);
     loop_ = nullptr;
 }
+
+}  // namespace lsk_muduo

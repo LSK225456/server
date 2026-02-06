@@ -1,7 +1,7 @@
 #include "InetAddress.h"
 #include <strings.h>
 #include <string.h>
-
+namespace lsk_muduo {
 InetAddress::InetAddress(uint16_t port, std::string ip)
 {
     bzero(&addr_, sizeof addr_);
@@ -37,4 +37,4 @@ uint16_t InetAddress::toPort() const
     return ntohs(addr_.sin_port);
 }
 
-
+}

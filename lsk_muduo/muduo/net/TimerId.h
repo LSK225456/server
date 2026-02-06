@@ -1,29 +1,31 @@
-#pragma once
+#ifndef LSK_MUDUO_NET_TIMERID_H
+#define LSK_MUDUO_NET_TIMERID_H
+
+#include <stdint.h>
+
+namespace lsk_muduo {
 
 class Timer;
 
-// 对外的定时器标识符，用于取消定时器
-class TimerId
-{
+class TimerId {
 public:
     TimerId()
-        : timer_(nullptr),
-          sequence_(0)
+        : timer_(nullptr), sequence_(0)
     {
     }
 
-    TimerId(Timer* timer, int64_t seq)
-        : timer_(timer),
-          sequence_(seq)
+    TimerId(Timer *timer, int64_t seq)
+        : timer_(timer), sequence_(seq)
     {
     }
 
-    // 默认拷贝构造、析构和赋值都可以
-
-    friend class TimerQueue;    // 只有 TimerQueue 能看到 TimerId 里面的内容（指针和序号）。
-    // 对用户（如 TcpConnection）来说，TimerId 就是个黑盒，除了拿着它什么都做不了。
+    friend class TimerQueue;
 
 private:
-    Timer* timer_;
+    Timer *timer_;
     int64_t sequence_;
 };
+
+}  // namespace lsk_muduo
+
+#endif  // LSK_MUDUO_NET_TIMERID_H

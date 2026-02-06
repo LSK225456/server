@@ -9,6 +9,9 @@
 #include <cstring>
 #include <arpa/inet.h>  // 添加：提供 htonl, ntohl 等函数
 
+
+namespace lsk_muduo {
+
 class Buffer : public copyable
 {
 public:
@@ -204,21 +207,15 @@ public:
     /// 追加 16 位整数（主机字节序 -> 网络字节序）
     void appendInt16(int16_t x) {
         int16_t be16 = hostToNetwork16(x);
-        append(&be16, sizeof(be16));
+        append(reinterpret_cast<const char*>(&be16), sizeof(be16));
     }
 
-    /// 读取完整的字符串（指定长度）
-    std::string read(size_t len) {
-        assert(readableBytes() >= len);
-        std::string result(peek(), len);
-        retrieve(len);
-        return result;
-    }
+   
 
     void prependInt16(int16_t x)
     {
         assert(prependableBytes() >= sizeof(int16_t));
-        int16_t be16 = htobe16(x);
+        int16_t be16 = hostToNetwork16(x);
         readerIndex_ -= sizeof(int16_t);
         ::memcpy(begin() + readerIndex_, &be16, sizeof(be16));  // 使用 ::memcpy
     }

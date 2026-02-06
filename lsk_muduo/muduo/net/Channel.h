@@ -4,7 +4,7 @@
 #include "../base/Timestamp.h"
 #include <functional>
 #include <memory>
-
+namespace lsk_muduo {
 class EventLoop;
 
 class Channel : noncopyable
@@ -70,3 +70,4 @@ private:
     EventCallback errorCallback_;
 };
 
+}

@@ -1,34 +1,26 @@
-#pragma once
+#ifndef LSK_MUDUO_NET_TIMERQUEUE_H
+#define LSK_MUDUO_NET_TIMERQUEUE_H
 
-#include "../base/noncopyable.h"
-#include "../base/Timestamp.h"
 #include "Channel.h"
-#include "Callbacks.h"
-
+#include "TimerId.h"
+#include "../base/Timestamp.h"
 #include <set>
 #include <vector>
-#include <memory>
+#include <functional>
+
+namespace lsk_muduo {
 
 class EventLoop;
 class Timer;
-class TimerId;
 
-// 它负责维护所有定时器的顺序,定时器队列，使用 timerfd 实现统一事件源
-class TimerQueue : noncopyable
-{
+class TimerQueue {
 public:
-    explicit TimerQueue(EventLoop* loop);
+    using TimerCallback = std::function<void()>;
+
+    explicit TimerQueue(EventLoop *loop);
     ~TimerQueue();
 
-    // 添加定时器，线程安全
-    // @param cb: 定时器回调
-    // @param when: 到期时间
-    // @param interval: 重复间隔（秒），0表示一次性定时器
-    TimerId addTimer(TimerCallback cb,
-                     Timestamp when,
-                     double interval);
-
-    // 取消定时器，线程安全,清理所有未执行的 Timer 内存
+    TimerId addTimer(TimerCallback cb, Timestamp when, double interval);
     void cancel(TimerId timerId);
 
 private:
@@ -64,17 +56,20 @@ private:
     // 插入定时器到定时器列表
     bool insert(Timer* timer);
 
-    EventLoop* loop_;               // 所属 EventLoop
-    const int timerfd_;             // timerfd 文件描述符
-    Channel timerfdChannel_;        // timerfd 对应的 Channel
-    TimerList timers_;              // 定时器列表
+    EventLoop *loop_;
+    const int timerfd_;
+    Channel timerfdChannel_;
+    TimerList timers_;
 
     // 用于 cancel()
     // 辅助容器：按地址排序的定时器集合。作用：当用户调用 cancel(TimerId) 时，我们只有 Timer指针。
     // 在 timers_ (按时间排) 中找指针是 O(N) 的，太慢。在 activeTimers_ (按指针排) 中找指针是 O(log N) 的，很快。
-    ActiveTimerSet activeTimers_;   // 活动定时器集合，便于通过 Timer* 查找
+    ActiveTimerSet activeTimers_;
 
-    
-    bool callingExpiredTimers_;     // 是否正在调用到期的定时器
-    ActiveTimerSet cancelingTimers_; // 保存正在取消的定时器
+    bool callingExpiredTimers_;
+    ActiveTimerSet cancelingTimers_;
 };
+
+}  // namespace lsk_muduo
+
+#endif  // LSK_MUDUO_NET_TIMERQUEUE_H

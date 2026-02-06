@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <cstring>  // 添加此头文件，提供 memcpy
 
+
+namespace lsk_muduo {
 ssize_t Buffer::readFd(int fd, int *saveErrno)
 {
     char extrabuf[65536] = {0};
@@ -58,7 +60,7 @@ int32_t Buffer::peekInt32() const
     std::memcpy(&be32, peek(), sizeof(int32_t));
     
     // 从网络字节序（大端）转换为主机字节序
-    return be32toh(be32);
+    return networkToHost32(be32);
 }
 
 int32_t Buffer::readInt32()
@@ -75,7 +77,7 @@ int32_t Buffer::readInt32()
 void Buffer::appendInt32(int32_t x)
 {
     // 从主机字节序转换为网络字节序（大端）
-    int32_t be32 = htobe32(x);
+    int32_t be32 = hostToNetwork32(x);
     
     // 追加到可写区域
     append(reinterpret_cast<const char*>(&be32), sizeof(be32));
@@ -87,7 +89,7 @@ void Buffer::prependInt32(int32_t x)
     assert(prependableBytes() >= sizeof(int32_t));
     
     // 从主机字节序转换为网络字节序（大端）
-    int32_t be32 = htobe32(x);
+    int32_t be32 = hostToNetwork32(x);
     
     // 读指针前移 4 字节
     readerIndex_ -= sizeof(int32_t);
@@ -95,3 +97,4 @@ void Buffer::prependInt32(int32_t x)
     // 在新的读指针位置写入数据
     std::memcpy(begin() + readerIndex_, &be32, sizeof(be32));
 }
+} // namespace lsk_muduo

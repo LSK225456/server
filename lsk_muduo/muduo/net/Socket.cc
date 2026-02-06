@@ -8,7 +8,7 @@
 #include <strings.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
-
+namespace lsk_muduo {
 Socket::~Socket()
 {
     close(sockfd_);
@@ -78,4 +78,5 @@ void Socket::setKeepAlive(bool on)
 {
     int optval = on ? 1 : 0;
     ::setsockopt(sockfd_, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof optval);
+}
 }

@@ -3,10 +3,6 @@
 
 namespace lsk_muduo {
 
-/**
- * @brief 标记类可拷贝的 tag class
- * @note 继承此类表示该类可以安全地拷贝
- */
 class copyable {
 protected:
     copyable() = default;

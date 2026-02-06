@@ -1,9 +1,11 @@
 #include "EPollPoller.h"
+#include "Channel.h"  // 添加：需要 Channel 的完整定义
 #include "../base/Logger.h"
-#include "Channel.h"
 #include <errno.h>
 #include <unistd.h>
-#include <strings.h>
+#include <string.h>
+
+namespace lsk_muduo {  // 添加命名空间
 
 const int kNew = -1;
 const int kAdded = 1;
@@ -140,4 +142,4 @@ void EPollPoller::update(int operation, Channel *channel)
             LOG_FATAL << "epoll_ctl add/mod error:" << errno;
         }
     }
-}
+}  // namespace lsk_muduo

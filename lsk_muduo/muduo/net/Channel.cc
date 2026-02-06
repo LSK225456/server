@@ -2,7 +2,7 @@
 #include "EventLoop.h"
 #include "../base/Logger.h"
 #include <sys/epoll.h>
-
+namespace lsk_muduo {
 const int Channel::kNoneEvent = 0;
 const int Channel::kReadEvent = EPOLLIN | EPOLLPRI;
 const int Channel::kWriteEvent = EPOLLOUT;
@@ -73,4 +73,5 @@ void  Channel::handleEventWithGuard(Timestamp receiveTime)
         if (writeCallback_) writeCallback_();
     }
 
+}
 }

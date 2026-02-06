@@ -1,11 +1,11 @@
 #include "Acceptor.h"
-#include "../base/Logger.h"
+#include "EventLoop.h"
 #include "InetAddress.h"
-
-#include <sys/types.h>    
-#include <sys/socket.h>
-#include <errno.h>
+#include "Socket.h"
+#include "../base/Logger.h"
 #include <unistd.h>
+
+namespace lsk_muduo {
 
 static int createNonblocking()
 {
@@ -20,16 +20,15 @@ static int createNonblocking()
 
 Acceptor::Acceptor(EventLoop *loop, const InetAddress &listenAddr, bool reuseport)
     : loop_(loop),
-      acceptSocket_(Socket::createNonblockingSocketOrDie()),
+      acceptSocket_(createNonblocking()),
       acceptChannel_(loop, acceptSocket_.fd()),
       listenning_(false)
 {
-    (void)reuseport;  // 抑制未使用参数警告
+    (void)reuseport;
     acceptSocket_.setReuseAddr(true);
     acceptSocket_.bindAddress(listenAddr);
     acceptChannel_.setReadCallback(std::bind(&Acceptor::handleRead, this));
 }
-
 
 Acceptor::~Acceptor()
 {
@@ -37,14 +36,12 @@ Acceptor::~Acceptor()
     acceptChannel_.remove();
 }
 
-
 void Acceptor::listen()
 {
     listenning_ = true;
     acceptSocket_.listen();
     acceptChannel_.enableReading();
 }
-
 
 void Acceptor::handleRead()
 {
@@ -69,4 +66,5 @@ void Acceptor::handleRead()
             LOG_ERROR << __FILE__ << ":" << __FUNCTION__ << ":" << __LINE__ << " sockfd reached limit!";
         }
     }
+}
 }

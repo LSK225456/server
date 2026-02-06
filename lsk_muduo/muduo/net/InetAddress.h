@@ -3,7 +3,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <string>
-
+namespace lsk_muduo {
 class InetAddress
 {
 public:
@@ -21,3 +21,4 @@ private:
     sockaddr_in addr_;
 
 }; 
+}

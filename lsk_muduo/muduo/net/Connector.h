@@ -6,7 +6,7 @@
 #include <functional>
 #include <memory>
 #include <atomic>
-
+namespace lsk_muduo {
 class Channel;
 class EventLoop;
 class TimerId; 
@@ -55,3 +55,4 @@ private:
     NewConnectionCallback newConnectionCallback_;
     int retryDelayMs_;         // 当前的重连延迟时间（毫秒）
 };
+}

@@ -9,7 +9,7 @@
 #include "../base/noncopyable.h"
 #include "../base/Timestamp.h"
 #include "../base/CurrentThread.h"
-
+namespace lsk_muduo {
 class Channel;
 class Poller;
 class TimerQueue;  
@@ -83,3 +83,4 @@ private:
     std::unique_ptr<TimerQueue> timerQueue_;
 
 };
+}

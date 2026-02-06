@@ -10,6 +10,8 @@
 #include <strings.h>
 #include <cassert>  
 
+
+namespace lsk_muduo {
 // 获取对端地址
 static InetAddress getPeerAddr(int sockfd)
 {
@@ -171,3 +173,4 @@ void TcpClient::removeConnection(const TcpConnectionPtr& conn)
         connector_->restart();
     }
 }
+} // namespace lsk_muduo
