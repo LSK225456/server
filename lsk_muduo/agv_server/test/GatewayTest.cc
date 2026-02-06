@@ -7,6 +7,7 @@
 #include "../../muduo/net/TcpClient.h"
 #include "../../muduo/net/InetAddress.h"
 #include "../../muduo/base/Logger.h"
+#include "../../muduo/net/TimerId.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -63,7 +64,7 @@ public:
 
         Buffer buf;
         LengthHeaderCodec::encode(&buf, MSG_AGV_TELEMETRY, payload);
-        conn_->send(&buf);
+        conn_->send(buf.retrieveAllAsString());
 
         std::cout << "[SEND] Telemetry from [" << agv_id_ 
                   << "] battery=" << battery << "%" << std::endl;
@@ -81,7 +82,7 @@ public:
 
         Buffer buf;
         LengthHeaderCodec::encode(&buf, MSG_HEARTBEAT, payload);
-        conn_->send(&buf);
+        conn_->send(buf.retrieveAllAsString());
 
         std::cout << "[SEND] Heartbeat from [" << agv_id_ << "]" << std::endl;
     }
@@ -100,6 +101,7 @@ private:
 
     void onMessage(const TcpConnectionPtr& conn, Buffer* buf, Timestamp time) {
         (void)time;
+        (void)conn;
         while (LengthHeaderCodec::hasCompleteMessage(buf)) {
             uint16_t msg_type = 0;
             uint16_t flags = 0;
@@ -149,6 +151,8 @@ void test_scenario_normal(EventLoop* loop, const InetAddress& server_addr) {
         std::cout << "\n[INFO] Test 1 completed" << std::endl;
         loop->quit();
     });
+
+    loop->loop();
 }
 
 void test_scenario_low_battery(EventLoop* loop, const InetAddress& server_addr) {
@@ -166,6 +170,8 @@ void test_scenario_low_battery(EventLoop* loop, const InetAddress& server_addr) 
         std::cout << "\n[INFO] Test 2 completed (check if charge command received)" << std::endl;
         loop->quit();
     });
+
+    loop->loop();
 }
 
 void test_scenario_watchdog(EventLoop* loop, const InetAddress& server_addr) {
@@ -187,6 +193,8 @@ void test_scenario_watchdog(EventLoop* loop, const InetAddress& server_addr) {
         std::cout << "\n[INFO] Test 3 completed (check server logs for WATCHDOG ALARM)" << std::endl;
         loop->quit();
     });
+
+    loop->loop();
 }
 
 // ========== 主程序 ==========
@@ -201,7 +209,7 @@ int main(int argc, char* argv[]) {
     }
 
     int test_num = std::atoi(argv[1]);
-    InetAddress server_addr("127.0.0.1", 9090);
+    InetAddress server_addr(9090, "127.0.0.1");
 
     EventLoop loop;
 
@@ -220,6 +228,6 @@ int main(int argc, char* argv[]) {
             return 1;
     }
 
-    loop.loop();
+ 
     return 0;
 }

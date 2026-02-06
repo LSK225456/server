@@ -1,6 +1,7 @@
 #include "GatewayServer.h"
 #include "../../muduo/base/Logger.h"
 #include "../codec/LengthHeaderCodec.h"
+#include "../../muduo/net/TimerId.h"
 
 namespace agv {
 namespace gateway {
@@ -272,7 +273,7 @@ void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
     }
     
     // 3. 发送
-    conn->send(&buf);
+    conn->send(buf.retrieveAllAsString());
 }
 
 void GatewayServer::sendChargeCommand(const std::string& agv_id,

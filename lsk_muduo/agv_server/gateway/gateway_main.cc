@@ -5,6 +5,8 @@
 #include <iostream>
 #include <cstdlib>
 
+using namespace lsk_muduo;
+
 /**
  * @brief GatewayServer 主程序入口（迭代一：Day 1-2）
  * 
