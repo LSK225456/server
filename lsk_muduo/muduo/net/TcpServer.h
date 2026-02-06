@@ -15,7 +15,7 @@
 #include <memory>
 #include <atomic>
 #include <unordered_map>
-
+namespace lsk_muduo {
 class TcpServer : noncopyable
 {
 public:
@@ -71,3 +71,4 @@ private:
     ConnectionMap connections_;
 
 };
+}

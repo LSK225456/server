@@ -9,6 +9,7 @@
 #include <string.h>
 #include <cassert>       
 #include <algorithm>   
+namespace lsk_muduo {
 
 // 向操作系统申请一个定时器文件描述符
 int createTimerfd()
@@ -265,4 +266,5 @@ bool TimerQueue::insert(Timer* timer)
 
     assert(timers_.size() == activeTimers_.size());
     return earliestChanged;
+}
 }

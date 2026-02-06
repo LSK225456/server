@@ -2,7 +2,7 @@
 // #include <time.h>
 #include <sys/time.h>
 
-
+namespace lsk_muduo {
 Timestamp::Timestamp():microSecondsSinceEpoch_(0) {}
 
 Timestamp::Timestamp(int64_t microSecondsSinceEpoch)
@@ -32,4 +32,5 @@ std::string Timestamp::toString() const
         tm_time->tm_min,
         tm_time->tm_sec);
     return buf;
+}
 }

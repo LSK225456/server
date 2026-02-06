@@ -2,9 +2,9 @@
 #define LSK_MUDUO_GATEWAY_AGV_SESSION_H
 
 #include "../../muduo/base/Timestamp.h"
-#include "../../muduo/base/Mutex.h"
 #include <string>
 #include <memory>
+#include <mutex>
 
 namespace agv {
 namespace gateway {
@@ -64,8 +64,8 @@ public:
      * @brief 获取最后活跃时间
      * @note Timer 线程调用，用于看门狗检测
      */
-    Timestamp getLastActiveTime() const {
-        MutexLockGuard lock(mutex_);
+    lsk_muduo::Timestamp getLastActiveTime() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         return last_active_time_;
     }
 
@@ -74,7 +74,7 @@ public:
      * @note IO 线程或业务引擎调用
      */
     double getBatteryLevel() const {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         return battery_level_;
     }
 
@@ -83,7 +83,7 @@ public:
      * @note 多线程读取，需加锁
      */
     State getState() const {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         return state_;
     }
 
@@ -92,7 +92,7 @@ public:
      * @note 预留接口，迭代二完善
      */
     Pose getPose() const {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         return pose_;
     }
 
@@ -104,8 +104,8 @@ public:
      * @note 调用场景：IO 线程的 onMessage 回调中
      */
     void updateActiveTime() {
-        MutexLockGuard lock(mutex_);
-        last_active_time_ = Timestamp::now();
+        std::lock_guard<std::mutex> lock(mutex_);
+        last_active_time_ = lsk_muduo::Timestamp::now();
     }
 
     /**
@@ -114,7 +114,7 @@ public:
      * @note IO 线程调用，从 Telemetry 消息中提取
      */
     void updateBatteryLevel(double level) {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         battery_level_ = level;
     }
 
@@ -127,7 +127,7 @@ public:
      * @note IO 线程调用
      */
     void updatePose(double x, double y, double theta, double confidence) {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         pose_.x = x;
         pose_.y = y;
         pose_.theta = theta;
@@ -141,7 +141,7 @@ public:
      *       - IO 线程：业务引擎下发充电指令，设置 CHARGING
      */
     void setState(State state) {
-        MutexLockGuard lock(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
         state_ = state;
     }
 
@@ -152,8 +152,8 @@ private:
 
     // ==================== 可变字段（需加锁保护）====================
     
-    mutable MutexLock mutex_;          ///< 互斥锁，保护以下字段
-    Timestamp last_active_time_;       ///< 最后活跃时间（看门狗用）
+    mutable std::mutex mutex_;        ///< 互斥锁，保护以下字段
+    lsk_muduo::Timestamp  last_active_time_;       ///< 最后活跃时间（看门狗用）
     double battery_level_;             ///< 电池电量 [0.0, 100.0]
     State state_;                      ///< 当前状态
     Pose pose_;                        ///< 位姿信息（预留）

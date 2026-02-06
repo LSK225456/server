@@ -6,7 +6,7 @@
 namespace agv {
 namespace codec {
 
-bool LengthHeaderCodec::encode(Buffer* buf,
+bool LengthHeaderCodec::encode(lsk_muduo::Buffer* buf,
                                uint16_t msgType,
                                const std::string& protoData,
                                uint16_t flags)
@@ -32,7 +32,7 @@ bool LengthHeaderCodec::encode(Buffer* buf,
     return true;
 }
 
-bool LengthHeaderCodec::hasCompleteMessage(const Buffer* buf)
+bool LengthHeaderCodec::hasCompleteMessage(const lsk_muduo::Buffer* buf)
 {
     if (!buf || buf->readableBytes() < kHeaderLen) {
         return false;
@@ -47,7 +47,7 @@ bool LengthHeaderCodec::hasCompleteMessage(const Buffer* buf)
     return buf->readableBytes() >= totalLen;
 }
 
-uint32_t LengthHeaderCodec::peekMessageLength(const Buffer* buf)
+uint32_t LengthHeaderCodec::peekMessageLength(const lsk_muduo::Buffer* buf)
 {
     if (!buf || buf->readableBytes() < kHeaderLen) {
         return 0;
@@ -62,7 +62,7 @@ uint32_t LengthHeaderCodec::peekMessageLength(const Buffer* buf)
     return totalLen;
 }
 
-bool LengthHeaderCodec::decode(Buffer* buf,
+bool LengthHeaderCodec::decode(lsk_muduo::Buffer* buf,
                                uint16_t* msgType,
                                std::string* protoData,
                                uint16_t* flags)

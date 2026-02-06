@@ -5,7 +5,7 @@ namespace gateway {
 
 AgvSession::AgvSession(const std::string& id)
     : agv_id_(id),
-      last_active_time_(Timestamp::now()),
+      last_active_time_(lsk_muduo::Timestamp::now()),
       battery_level_(100.0),
       state_(ONLINE),
       pose_{0.0, 0.0, 0.0, 1.0} {

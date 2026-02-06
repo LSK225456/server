@@ -43,21 +43,21 @@ public:
 
     // ========== 编码接口 ==========
     
-    static bool encode(Buffer* buf, 
+    static bool encode(lsk_muduo::Buffer* buf, 
                       uint16_t msgType, 
                       const std::string& protoData,
                       uint16_t flags = FLAG_NONE);
 
     // ========== 解码接口 ==========
     
-    static bool hasCompleteMessage(const Buffer* buf);
+    static bool hasCompleteMessage(const lsk_muduo::Buffer* buf);
     
-    static bool decode(Buffer* buf,
+    static bool decode(lsk_muduo::Buffer* buf,
                       uint16_t* msgType,
                       std::string* protoData,
                       uint16_t* flags = nullptr);
 
-    static uint32_t peekMessageLength(const Buffer* buf);
+    static uint32_t peekMessageLength(const lsk_muduo::Buffer* buf);
 };
 
 } // namespace codec

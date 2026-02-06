@@ -65,7 +65,7 @@ void GatewayServer::onConnection(const TcpConnectionPtr& conn) {
         LOG_INFO << "Connection closed: " << conn->peerAddress().toIpPort();
         
         // 遍历 connections_，找到对应的 agv_id 并清理会话
-        MutexLockGuard lock(sessions_mutex_);
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
         for (auto it = connections_.begin(); it != connections_.end(); ) {
             if (it->second == conn) {
                 std::string agv_id = it->first;
@@ -186,7 +186,7 @@ void GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
 
 void GatewayServer::registerSession(const std::string& agv_id,
                                     const TcpConnectionPtr& conn) {
-    MutexLockGuard lock(sessions_mutex_);
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
     
     if (sessions_.find(agv_id) != sessions_.end()) {
         LOG_WARN << "Session [" << agv_id << "] already exists, replacing";
@@ -200,14 +200,14 @@ void GatewayServer::registerSession(const std::string& agv_id,
 }
 
 void GatewayServer::removeSession(const std::string& agv_id) {
-    MutexLockGuard lock(sessions_mutex_);
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
     sessions_.erase(agv_id);
     connections_.erase(agv_id);
     LOG_INFO << "Session removed: [" << agv_id << "]";
 }
 
 AgvSessionPtr GatewayServer::findSession(const std::string& agv_id) {
-    MutexLockGuard lock(sessions_mutex_);
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
     auto it = sessions_.find(agv_id);
     return (it != sessions_.end()) ? it->second : nullptr;
 }
@@ -217,7 +217,7 @@ AgvSessionPtr GatewayServer::findSession(const std::string& agv_id) {
 void GatewayServer::onWatchdogTimer() {
     Timestamp now = Timestamp::now();
     
-    MutexLockGuard lock(sessions_mutex_);
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
     for (auto& pair : sessions_) {
         const std::string& agv_id = pair.first;
         AgvSessionPtr session = pair.second;

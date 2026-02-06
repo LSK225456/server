@@ -4,7 +4,7 @@
 
 #include <strings.h>
 #include <functional>
-
+namespace lsk_muduo {
 static EventLoop* CheckLoopNotNull(EventLoop *loop)
 {
     if (loop == nullptr)
@@ -117,4 +117,5 @@ void TcpServer::removeConnectionInLoop(const TcpConnectionPtr &conn)
     ioloop->queueInLoop(
         std::bind(&TcpConnection::connectDestroyed, conn)
     );
+}
 }

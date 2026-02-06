@@ -4,7 +4,7 @@
 #include "../../muduo/net/TcpServer.h"
 #include "../../muduo/net/EventLoop.h"
 #include "../../muduo/net/Buffer.h"
-#include "../../muduo/base/Mutex.h"
+#include <mutex>
 #include "AgvSession.h"
 #include "../proto/message.pb.h"
 #include "../proto/common.pb.h"
@@ -45,8 +45,8 @@ public:
      * @param listen_addr 监听地址（端口）
      * @param name 服务器名称（用于日志）
      */
-    GatewayServer(EventLoop* loop,
-                  const InetAddress& listen_addr,
+    GatewayServer(lsk_muduo::EventLoop* loop,
+                  const lsk_muduo::InetAddress& listen_addr,
                   const std::string& name);
     
     ~GatewayServer();
@@ -75,7 +75,7 @@ private:
      * @note IO 线程调用
      * @note 连接断开时，遍历 connections_ 清理对应会话
      */
-    void onConnection(const TcpConnectionPtr& conn);
+    void onConnection(const lsk_muduo::TcpConnectionPtr& conn);
 
     /**
      * @brief 消息到达回调
@@ -85,9 +85,9 @@ private:
      *       2. 检查负载完整性（处理半包）
      *       3. 根据 MsgType 分发到不同处理函数
      */
-    void onMessage(const TcpConnectionPtr& conn,
-                   Buffer* buf,
-                   Timestamp receive_time);
+    void onMessage(const lsk_muduo::TcpConnectionPtr& conn,
+                   lsk_muduo::Buffer* buf,
+                   lsk_muduo::Timestamp receive_time);
 
     // ==================== 协议解析（LengthHeader + Protobuf）====================
     
@@ -102,7 +102,7 @@ private:
      * 
      * @note 迭代二会替换为 ProtobufDispatcher
      */
-    void handleProtobufMessage(const TcpConnectionPtr& conn,
+    void handleProtobufMessage(const lsk_muduo::TcpConnectionPtr& conn,
                                uint16_t msg_type,
                                const char* payload,
                                size_t len);
@@ -116,7 +116,7 @@ private:
      *       1. 更新 Session（电量、位姿、活跃时间）
      *       2. 触发业务引擎（检查低电量）
      */
-    void handleTelemetry(const TcpConnectionPtr& conn,
+    void handleTelemetry(const lsk_muduo::TcpConnectionPtr& conn,
                          const proto::AgvTelemetry& msg);
 
     /**
@@ -124,7 +124,7 @@ private:
      * @note 中频消息（1Hz）
      * @note 逻辑：刷新 last_active_time
      */
-    void handleHeartbeat(const TcpConnectionPtr& conn,
+    void handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
                          const proto::Heartbeat& msg);
 
     // ==================== 会话管理 ====================
@@ -135,7 +135,7 @@ private:
      * @note IO 线程调用（需加锁）
      */
     void registerSession(const std::string& agv_id,
-                         const TcpConnectionPtr& conn);
+                         const lsk_muduo::TcpConnectionPtr& conn);
 
     /**
      * @brief 移除会话
@@ -169,7 +169,7 @@ private:
      * @note 逻辑：if (battery < 20% && state != CHARGING) -> 下发充电指令
      */
     void checkLowBatteryAndCharge(const AgvSessionPtr& session,
-                                  const TcpConnectionPtr& conn);
+                                  const lsk_muduo::TcpConnectionPtr& conn);
 
     // ==================== 消息发送 ====================
     
@@ -181,7 +181,7 @@ private:
      * 
      * @note 封装流程：Protobuf 序列化 -> 构造 LengthHeader -> 发送
      */
-    void sendProtobufMessage(const TcpConnectionPtr& conn,
+    void sendProtobufMessage(const lsk_muduo::TcpConnectionPtr& conn,
                              uint16_t msg_type,
                              const google::protobuf::Message& message);
 
@@ -191,17 +191,17 @@ private:
      * @note 迭代三完善：发送 NavigationTask（目标 "CHARGER"）
      */
     void sendChargeCommand(const std::string& agv_id,
-                          const TcpConnectionPtr& conn);
+                          const lsk_muduo::TcpConnectionPtr& conn);
 
 private:
     // ==================== 成员变量 ====================
     
-    EventLoop* loop_;                   ///< 事件循环（IO 线程）
-    TcpServer server_;                  ///< TCP 服务器
+    lsk_muduo::EventLoop* loop_;                   ///< 事件循环（IO 线程）
+    lsk_muduo::TcpServer server_;                  ///< TCP 服务器
     
-    mutable MutexLock sessions_mutex_;  ///< 保护会话容器
+    mutable std::mutex sessions_mutex_;  ///< 保护会话容器
     std::map<std::string, AgvSessionPtr> sessions_;  ///< agv_id -> Session
-    std::map<std::string, TcpConnectionPtr> connections_;  ///< agv_id -> Connection
+    std::map<std::string, lsk_muduo::TcpConnectionPtr> connections_;  ///< agv_id -> Connection
 
     // ==================== 常量配置 ====================
     
