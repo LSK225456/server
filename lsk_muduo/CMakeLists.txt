@@ -96,12 +96,9 @@ target_link_libraries(lsk_muduo_net lsk_muduo_base pthread)
 add_subdirectory(agv_server)
 
 # ==================== 构建测试模块 ====================
-if(GTEST_FOUND)
-    enable_testing()
-    add_subdirectory(test_muduo)
-else()
-    message(WARNING "GTest not found, tests will not be built")
-endif()
+# 注意：test_muduo 中的部分测试不需要 GTest，始终构建
+enable_testing()
+add_subdirectory(test_muduo)
 
 # ==================== 安装规则 ====================
 install(TARGETS lsk_muduo_base lsk_muduo_net

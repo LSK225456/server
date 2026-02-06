@@ -181,6 +181,14 @@ void GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
     // 刷新活跃时间
     session->updateActiveTime();
     LOG_DEBUG << "Heartbeat from [" << agv_id << "]";
+    
+    // 回复心跳（迭代一：Day 3-4 客户端看门狗需求）
+    proto::Heartbeat response;
+    response.set_agv_id(agv_id);
+    response.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+    sendProtobufMessage(conn, proto::MSG_HEARTBEAT, response);
+    
+    LOG_DEBUG << "[SEND] Heartbeat response to [" << agv_id << "]";
 }
 
 // ==================== 会话管理实现 ====================
