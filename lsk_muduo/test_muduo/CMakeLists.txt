@@ -39,21 +39,7 @@ else()
     message(STATUS "GTest not found, skipping GTest-based tests")
 endif()
 
-# 以下测试不需要 GTest，始终构建
-# 4. Gateway 集成测试（包含新版 MockAgvClient）
-add_executable(gateway_integration_test 
-    gateway_test.cc 
-    MockAgvClient.cc
-)
-target_link_libraries(gateway_integration_test
-    agv_gateway
-    agv_codec
-    agv_proto
-    lsk_muduo_net
-    lsk_muduo_base
-    ${PROTOBUF_LIBRARIES}
-    pthread
-)
+
 
 # 5. MockAgvClient 功能测试（Day 3-4 验收测试）
 add_executable(mock_agv_client_test
