@@ -2,7 +2,7 @@
 #include "EPollPoller.h"
 
 #include <stdlib.h>
-
+namespace lsk_muduo {
 Poller* Poller::newDefaultPoller(EventLoop *loop)
 {
     if(::getenv("MUDUO_USE_POLL"))
@@ -13,4 +13,5 @@ Poller* Poller::newDefaultPoller(EventLoop *loop)
     {
         return new EPollPoller(loop);
     }
+}
 }

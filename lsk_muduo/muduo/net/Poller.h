@@ -4,7 +4,7 @@
 #include "../base/Timestamp.h"
 #include <vector>
 #include <unordered_map>
-
+namespace lsk_muduo {
 class Channel;
 class EventLoop;
 
@@ -31,3 +31,4 @@ protected:
 private:
     EventLoop *ownerLoop_;
 };
+}

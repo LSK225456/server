@@ -14,7 +14,7 @@
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <string>
-
+namespace lsk_muduo {
 static EventLoop* CheckLoopNotNull(EventLoop *loop)
 {
     if (loop == nullptr)
@@ -306,8 +306,6 @@ void TcpConnection::handleError()
     LOG_ERROR << "TcpConnection::handleError name:" << name_ << " - SO_ERROR:" << err;
 }
 
-
-
-
+}
 
 

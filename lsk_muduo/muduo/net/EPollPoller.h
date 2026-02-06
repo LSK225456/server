@@ -4,7 +4,7 @@
 #include "../base/Timestamp.h"
 #include <vector>
 #include <sys/epoll.h>
-
+namespace lsk_muduo {
 class Channel;
 
 class EPollPoller : public Poller
@@ -28,3 +28,4 @@ private:
     EventList events_;
 
 };
+}

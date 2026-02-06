@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-
+namespace lsk_muduo {
 class EventLoop;
 class EventLoopThread;
 
@@ -37,3 +37,4 @@ private:
     std::vector<std::unique_ptr<EventLoopThread>> threads_;
     std::vector<EventLoop*> loops_;
 };
+}

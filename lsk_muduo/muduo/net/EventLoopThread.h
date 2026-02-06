@@ -7,7 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <string>
-
+namespace lsk_muduo {
 class EventLoop;
 
 class EventLoopThread : noncopyable
@@ -30,3 +30,4 @@ private:
     std::condition_variable cond_;
     ThreadInitCallback callback_;
 };
+}

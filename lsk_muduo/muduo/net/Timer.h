@@ -4,6 +4,7 @@
 #include "../base/Timestamp.h"
 #include "Callbacks.h"
 #include <atomic>
+namespace lsk_muduo {
 
 // 定时器类，封装定时任务的所有信息
 class Timer : noncopyable
@@ -40,3 +41,4 @@ private:
 
     static std::atomic<int64_t> s_numCreated_;  // 定时器计数，用于生成唯一序号
 };
+}
