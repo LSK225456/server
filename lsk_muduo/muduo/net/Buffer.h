@@ -1,14 +1,15 @@
-#pragma once
+#ifndef LSK_MUDUO_NET_BUFFER_H
+#define LSK_MUDUO_NET_BUFFER_H
 
+#include "../base/copyable.h"
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <assert.h>
-#include <endian.h>   // 用于字节序转换：htobe32, be32toh
-#include <stdint.h>   // 用于固定宽度整数类型
-#include <cstring>    // 用于 memcpy
+#include <cassert>
+#include <cstring>
+#include <arpa/inet.h>  // 添加：提供 htonl, ntohl 等函数
 
-class Buffer
+class Buffer : public copyable
 {
 public:
     static const size_t kCheapPrepend = 8;
@@ -99,6 +100,23 @@ public:
 
     // ==================== 整数操作接口 ====================
     
+    // 网络字节序转换辅助函数
+    static int16_t networkToHost16(int16_t net16) {
+        return ntohs(static_cast<uint16_t>(net16));
+    }
+    
+    static int32_t networkToHost32(int32_t net32) {
+        return ntohl(static_cast<uint32_t>(net32));
+    }
+    
+    static int16_t hostToNetwork16(int16_t host16) {
+        return htons(static_cast<uint16_t>(host16));
+    }
+    
+    static int32_t hostToNetwork32(int32_t host32) {
+        return htonl(static_cast<uint32_t>(host32));
+    }
+
     /**
      * @brief 查看（但不移动读指针）Buffer 中的 32 位整数
      * @return 主机字节序的 int32_t 值
@@ -244,3 +262,7 @@ private:
     size_t readerIndex_;
     size_t writerIndex_;
 };
+
+}  // namespace lsk_muduo
+
+#endif  // LSK_MUDUO_NET_BUFFER_H

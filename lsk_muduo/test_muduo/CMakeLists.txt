@@ -88,78 +88,46 @@ add_test(NAME GatewayServerTest COMMAND gateway_test)
 # 安装到 bin 目录
 install(TARGETS gateway_test DESTINATION ${PROJECT_SOURCE_DIR}/bin)
 
-# ==================== 测试模块 ====================
+# ==================== 测试程序列表 ====================
 
-message(STATUS "Configuring Test module...")
-
-# 包含目录
-include_directories(
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_BINARY_DIR}/agv_server/proto
-    ${GTEST_INCLUDE_DIRS}
-)
-
-# ==================== Buffer 测试 ====================
+# 1. Buffer 测试
 add_executable(buffer_test BufferTest.cc)
-target_link_libraries(buffer_test
-    lsk_muduo_net
-    lsk_muduo_base
-    ${GTEST_BOTH_LIBRARIES}
-    pthread
-)
-set_target_properties(buffer_test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-)
-add_test(NAME BufferTest COMMAND buffer_test)
+target_link_libraries(buffer_test lsk_muduo_net lsk_muduo_base)
 
-# ==================== Codec 测试 ====================
+# 2. Codec 测试  
 add_executable(codec_test CodecTest.cc)
-target_link_libraries(codec_test
+target_link_libraries(codec_test 
     agv_codec
-    agv_proto
-    lsk_muduo_net
+    lsk_muduo_net 
     lsk_muduo_base
-    ${PROTOBUF_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-    pthread
 )
-set_target_properties(codec_test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-)
-add_test(NAME CodecTest COMMAND codec_test)
 
-# ==================== Proto 测试 ====================
+# 3. Protobuf 测试
 add_executable(proto_test ProtoTest.cc)
 target_link_libraries(proto_test
     agv_proto
-    ${PROTOBUF_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-    pthread
-)
-set_target_properties(proto_test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-)
-add_test(NAME ProtoTest COMMAND proto_test)
-
-# ==================== Gateway 测试 ====================
-add_executable(gateway_test gateway_test.cc)
-target_link_libraries(gateway_test
-    agv_gateway
-    agv_codec
-    agv_proto
     lsk_muduo_net
     lsk_muduo_base
     ${PROTOBUF_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-    pthread
 )
-set_target_properties(gateway_test PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
-)
-add_test(NAME GatewayTest COMMAND gateway_test)
 
+# 删除旧的 gateway_test（已移动到 agv_server/test）
+# add_executable(gateway_test gateway_test.cc)  # 已删除
+# target_link_libraries(gateway_test ...)       # 已删除
+
+# ==================== 输出目录配置 ====================
+
+set_target_properties(
+    buffer_test
+    codec_test
+    proto_test
+    PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
+
+# ==================== 总结信息 ====================
+
+message(STATUS "Configuring Test module...")
 message(STATUS "Test module configured")
 message(STATUS "  - buffer_test")
 message(STATUS "  - codec_test")
 message(STATUS "  - proto_test")
-message(STATUS "  - gateway_test")

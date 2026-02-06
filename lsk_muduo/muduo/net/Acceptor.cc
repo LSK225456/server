@@ -19,15 +19,14 @@ static int createNonblocking()
 
 
 Acceptor::Acceptor(EventLoop *loop, const InetAddress &listenAddr, bool reuseport)
-    : loop_(loop)
-    , acceptSocket_(createNonblocking())
-    , acceptChannel_(loop, acceptSocket_.fd())
-    , listenning_(false)
+    : loop_(loop),
+      acceptSocket_(Socket::createNonblockingSocketOrDie()),
+      acceptChannel_(loop, acceptSocket_.fd()),
+      listenning_(false)
 {
+    (void)reuseport;  // 抑制未使用参数警告
     acceptSocket_.setReuseAddr(true);
-    acceptSocket_.setReusePort(true);
     acceptSocket_.bindAddress(listenAddr);
-    
     acceptChannel_.setReadCallback(std::bind(&Acceptor::handleRead, this));
 }
 

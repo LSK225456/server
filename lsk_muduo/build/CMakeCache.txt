@@ -14,17 +14,13 @@
 # EXTERNAL cache entries
 ########################
 
-//Build test programs
-BUILD_TESTS:BOOL=OFF
-
 //Path to a program.
 CMAKE_ADDR2LINE:FILEPATH=/usr/bin/addr2line
 
 //Path to a program.
 CMAKE_AR:FILEPATH=/usr/bin/ar
 
-//Choose the type of build, options are: None Debug Release RelWithDebInfo
-// MinSizeRel ...
+//Build type
 CMAKE_BUILD_TYPE:STRING=Release
 
 //Enable/Disable color output during build.
@@ -100,8 +96,8 @@ CMAKE_EXE_LINKER_FLAGS_RELEASE:STRING=
 //Flags used by the linker during RELWITHDEBINFO builds.
 CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO:STRING=
 
-//No help, variable specified on the command line.
-CMAKE_EXPORT_COMPILE_COMMANDS:UNINITIALIZED=ON
+//Enable/Disable output of compile commands during generation.
+CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=
 
 //Value Computed by CMake.
 CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=/home/lsk/server/server/lsk_muduo/build/CMakeFiles/pkgRedirects
@@ -145,7 +141,7 @@ CMAKE_OBJCOPY:FILEPATH=/usr/bin/objcopy
 CMAKE_OBJDUMP:FILEPATH=/usr/bin/objdump
 
 //Value Computed by CMake
-CMAKE_PROJECT_DESCRIPTION:STATIC=A C++11 Muduo Network Library
+CMAKE_PROJECT_DESCRIPTION:STATIC=
 
 //Value Computed by CMake
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
@@ -297,6 +293,12 @@ Protobuf_PROTOC_LIBRARY_DEBUG:FILEPATH=/usr/lib/x86_64-linux-gnu/libprotoc.so
 Protobuf_PROTOC_LIBRARY_RELEASE:FILEPATH=/usr/lib/x86_64-linux-gnu/libprotoc.so
 
 //Dependencies for the target
+agv_codec_LIB_DEPENDS:STATIC=general;lsk_muduo_net;general;lsk_muduo_base;
+
+//Dependencies for the target
+agv_gateway_LIB_DEPENDS:STATIC=general;agv_codec;general;agv_proto;general;lsk_muduo_net;general;lsk_muduo_base;general;/usr/lib/x86_64-linux-gnu/libprotobuf.so;general;-lpthread;
+
+//Dependencies for the target
 agv_proto_LIB_DEPENDS:STATIC=general;/usr/lib/x86_64-linux-gnu/libprotobuf.so;general;-lpthread;
 
 //Value Computed by CMake
@@ -307,6 +309,9 @@ lsk_muduo_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
 lsk_muduo_SOURCE_DIR:STATIC=/home/lsk/server/server/lsk_muduo
+
+//Dependencies for the target
+lsk_muduo_net_LIB_DEPENDS:STATIC=general;lsk_muduo_base;general;pthread;
 
 
 ########################
@@ -419,7 +424,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=4
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=7
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP
