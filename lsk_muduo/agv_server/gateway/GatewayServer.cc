@@ -35,6 +35,9 @@ GatewayServer::GatewayServer(EventLoop* loop,
         std::bind(&GatewayServer::onMessage, this,
                   std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     
+    // 初始化消息分发器（注册所有消息类型的 handler）
+    initDispatcher();
+    
     LOG_INFO << "GatewayServer created: " << name;
 }
 
@@ -56,6 +59,33 @@ void GatewayServer::start() {
              << "ms, timeout: " << kSessionTimeoutMs << "ms)";
 }
 
+// ==================== 消息分发器初始化 ====================
+
+void GatewayServer::initDispatcher() {
+    // 注册遥测消息处理器
+    dispatcher_.registerHandler<proto::AgvTelemetry>(
+        proto::MSG_AGV_TELEMETRY,
+        std::bind(&GatewayServer::handleTelemetry, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    
+    // 注册心跳消息处理器
+    dispatcher_.registerHandler<proto::Heartbeat>(
+        proto::MSG_HEARTBEAT,
+        std::bind(&GatewayServer::handleHeartbeat, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    
+    // 设置默认回调（处理未注册的消息类型）
+    dispatcher_.setDefaultCallback(
+        [](const TcpConnectionPtr& conn, uint16_t msg_type,
+           const char* /*payload*/, size_t /*len*/) {
+            LOG_WARN << "Unknown message type: 0x" << std::hex << msg_type 
+                     << std::dec << " from " << conn->peerAddress().toIpPort();
+        });
+    
+    LOG_INFO << "ProtobufDispatcher initialized with " 
+             << dispatcher_.handlerCount() << " handlers";
+}
+
 // ==================== TcpServer 回调实现 ====================
 
 void GatewayServer::onConnection(const TcpConnectionPtr& conn) {
@@ -65,18 +95,8 @@ void GatewayServer::onConnection(const TcpConnectionPtr& conn) {
     } else {
         LOG_INFO << "Connection closed: " << conn->peerAddress().toIpPort();
         
-        // 遍历 connections_，找到对应的 agv_id 并清理会话
-        std::lock_guard<std::mutex> lock(sessions_mutex_);
-        for (auto it = connections_.begin(); it != connections_.end(); ) {
-            if (it->second == conn) {
-                std::string agv_id = it->first;
-                LOG_WARN << "AGV [" << agv_id << "] connection lost, removing session";
-                sessions_.erase(agv_id);
-                it = connections_.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        // 使用 ConcurrentMap 清理断开的连接对应的会话
+        removeSessionByConnection(conn);
     }
 }
 
@@ -98,40 +118,8 @@ void GatewayServer::onMessage(const TcpConnectionPtr& conn,
             return;
         }
         
-        // 处理 Protobuf 消息
-        handleProtobufMessage(conn, msg_type, payload.data(), payload.size());
-    }
-}
-
-// ==================== Protobuf 消息处理 ====================
-
-void GatewayServer::handleProtobufMessage(const TcpConnectionPtr& conn,
-                                          uint16_t msg_type,
-                                          const char* payload,
-                                          size_t len) {
-    // 根据消息类型分发（使用 message_id.h 中的常量）
-    switch (msg_type) {
-        case proto::MSG_AGV_TELEMETRY: {
-            proto::AgvTelemetry msg;
-            if (!msg.ParseFromArray(payload, static_cast<int>(len))) {
-                LOG_ERROR << "Failed to parse AgvTelemetry";
-                return;
-            }
-            handleTelemetry(conn, msg);
-            break;
-        }
-        case proto::MSG_HEARTBEAT: {
-            proto::Heartbeat msg;
-            if (!msg.ParseFromArray(payload, static_cast<int>(len))) {
-                LOG_ERROR << "Failed to parse Heartbeat";
-                return;
-            }
-            handleHeartbeat(conn, msg);
-            break;
-        }
-        default:
-            LOG_WARN << "Unknown message type: 0x" << std::hex << msg_type << std::dec;
-            break;
+        // 使用 ProtobufDispatcher 分发消息（替换原 switch-case）
+        dispatcher_.dispatch(conn, msg_type, payload.data(), payload.size());
     }
 }
 
@@ -141,7 +129,7 @@ void GatewayServer::handleTelemetry(const TcpConnectionPtr& conn,
                                     const proto::AgvTelemetry& msg) {
     const std::string& agv_id = msg.agv_id();
     
-    // 1. 查找或创建会话
+    // 1. 查找或创建会话,懒加载注册,第一次收到消息时，才建立 Session
     AgvSessionPtr session = findSession(agv_id);
     if (!session) {
         registerSession(agv_id, conn);
@@ -191,34 +179,48 @@ void GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
     LOG_DEBUG << "[SEND] Heartbeat response to [" << agv_id << "]";
 }
 
-// ==================== 会话管理实现 ====================
+// ==================== 会话管理实现（ConcurrentMap）====================
 
 void GatewayServer::registerSession(const std::string& agv_id,
                                     const TcpConnectionPtr& conn) {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    
-    if (sessions_.find(agv_id) != sessions_.end()) {
+    auto existingSession = sessions_.find(agv_id);
+    if (existingSession) {
         LOG_WARN << "Session [" << agv_id << "] already exists, replacing";
     }
     
-    sessions_[agv_id] = std::make_shared<AgvSession>(agv_id);
-    connections_[agv_id] = conn;
+    // 使用 ConcurrentMap::insert（插入或替换）
+    sessions_.insert(agv_id, std::make_shared<AgvSession>(agv_id));
+    connections_.insert(agv_id, conn);  // TcpConnectionPtr 就是 shared_ptr<TcpConnection>
     
     LOG_INFO << "Session registered: [" << agv_id << "] from "
              << conn->peerAddress().toIpPort();
 }
 
 void GatewayServer::removeSession(const std::string& agv_id) {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
     sessions_.erase(agv_id);
     connections_.erase(agv_id);
     LOG_INFO << "Session removed: [" << agv_id << "]";
 }
 
 AgvSessionPtr GatewayServer::findSession(const std::string& agv_id) {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    auto it = sessions_.find(agv_id);
-    return (it != sessions_.end()) ? it->second : nullptr;
+    return sessions_.find(agv_id);
+}
+
+void GatewayServer::removeSessionByConnection(const TcpConnectionPtr& conn) {
+    // 先收集要删除的 agv_id（避免在遍历中修改另一个 ConcurrentMap）
+    std::vector<std::string> toRemove;
+    
+    connections_.forEach([&conn, &toRemove](const std::string& agv_id,
+                                            const std::shared_ptr<lsk_muduo::TcpConnection>& storedConn) {
+        if (storedConn.get() == conn.get()) {
+            toRemove.push_back(agv_id);
+        }
+    });
+    
+    for (const auto& agv_id : toRemove) {
+        LOG_WARN << "AGV [" << agv_id << "] connection lost, removing session";
+        removeSession(agv_id);
+    }
 }
 
 // ==================== 上行看门狗实现 ====================
@@ -226,11 +228,9 @@ AgvSessionPtr GatewayServer::findSession(const std::string& agv_id) {
 void GatewayServer::onWatchdogTimer() {
     Timestamp now = Timestamp::now();
     
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
-    for (auto& pair : sessions_) {
-        const std::string& agv_id = pair.first;
-        AgvSessionPtr session = pair.second;
-        
+    // 使用 ConcurrentMap::forEach 安全遍历（读锁保护）
+    sessions_.forEach([&now, this](const std::string& agv_id,
+                                    const AgvSessionPtr& session) {
         // 计算距离最后活跃时间的间隔（毫秒）
         double elapsed_sec = timeDifference(now, session->getLastActiveTime());
         int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);
@@ -241,7 +241,7 @@ void GatewayServer::onWatchdogTimer() {
             LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
                       << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
         }
-    }
+    });
 }
 
 // ==================== 基础业务引擎实现 ====================

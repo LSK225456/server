@@ -4,13 +4,13 @@
 #include "../../muduo/net/TcpServer.h"
 #include "../../muduo/net/EventLoop.h"
 #include "../../muduo/net/Buffer.h"
-#include <mutex>
 #include "AgvSession.h"
+#include "ProtobufDispatcher.h"
+#include "ConcurrentMap.h"
 #include "../proto/message.pb.h"
 #include "../proto/common.pb.h"
 #include "../proto/message_id.h"
 #include "../codec/LengthHeaderCodec.h"
-#include <map>
 #include <memory>
 #include <functional>
 
@@ -18,7 +18,7 @@ namespace agv {
 namespace gateway {
 
 /**
- * @brief AGV 网关服务器（迭代一：Day 1-2）
+ * @brief AGV 网关服务器（迭代二升级版）
  * 
  * @note 核心职责：
  *       1. 管理车辆连接会话（AgvSession）
@@ -26,14 +26,14 @@ namespace gateway {
  *       3. 基础业务引擎：低电量（< 20%）自动触发充电
  *       4. 协议解析：LengthHeader(8字节) + Protobuf
  * 
+ * @note 迭代二重构：
+ *       - 消息分发：ProtobufDispatcher 模板化类型安全分发（替换 switch-case）
+ *       - 会话管理：ConcurrentMap<string, AgvSession> 读写锁保护（替换 std::map + mutex）
+ *       - 连接管理：ConcurrentMap<string, TcpConnection> 管理 agv_id 到连接的映射
+ * 
  * @note 架构设计：
  *       - 单 Reactor 模式：IO 线程 == EventLoop 线程
  *       - 迭代三会改为 Reactor + Worker 线程池
- * 
- * @note 扩展性：
- *       - 会话管理：预留 ConcurrentMap 替换 std::map
- *       - 消息分发：预留 ProtobufDispatcher 替换 switch-case
- *       - 业务逻辑：预留 BusinessHandler 模块
  */
 class GatewayServer {
 public:
@@ -89,23 +89,14 @@ private:
                    lsk_muduo::Buffer* buf,
                    lsk_muduo::Timestamp receive_time);
 
-    // ==================== 协议解析（LengthHeader + Protobuf）====================
+    // ==================== 消息分发（ProtobufDispatcher）====================
     
-    // bool parseHeader(Buffer* buf, uint16_t* msg_type, uint32_t* payload_len);  // 删除这行
-
     /**
-     * @brief 处理 Protobuf 消息
-     * @param conn 连接对象
-     * @param msg_type 消息类型（用于 switch 分发）
-     * @param payload Protobuf 序列化字节流
-     * @param len 字节流长度
-     * 
-     * @note 迭代二会替换为 ProtobufDispatcher
+     * @brief 初始化消息分发器
+     * @note 在构造函数中调用，注册所有消息类型的处理函数
+     * @note 新增消息类型只需在此函数中添加一行 registerHandler 调用
      */
-    void handleProtobufMessage(const lsk_muduo::TcpConnectionPtr& conn,
-                               uint16_t msg_type,
-                               const char* payload,
-                               size_t len);
+    void initDispatcher();
 
     // ==================== 业务处理（按消息类型分发）====================
     
@@ -127,12 +118,12 @@ private:
     void handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
                          const proto::Heartbeat& msg);
 
-    // ==================== 会话管理 ====================
+    // ==================== 会话管理（ConcurrentMap）====================
     
     /**
      * @brief 注册新会话
      * @note 首次收到该 agv_id 的消息时调用
-     * @note IO 线程调用（需加锁）
+     * @note 线程安全：ConcurrentMap 内部持有读写锁
      */
     void registerSession(const std::string& agv_id,
                          const lsk_muduo::TcpConnectionPtr& conn);
@@ -140,16 +131,21 @@ private:
     /**
      * @brief 移除会话
      * @note 连接断开或超时时调用
-     * @note IO 线程调用（需加锁）
+     * @note 线程安全：ConcurrentMap 内部持有读写锁
      */
     void removeSession(const std::string& agv_id);
 
     /**
      * @brief 查找会话
-     * @return shared_ptr 拷贝（线程安全）
-     * @note 多线程调用（需加锁）
+     * @return shared_ptr 拷贝（线程安全，即使其他线程 erase 也不会悬挂）
      */
     AgvSessionPtr findSession(const std::string& agv_id);
+
+    /**
+     * @brief 根据连接对象反查 agv_id 并移除会话
+     * @note 连接断开时调用，使用 ConcurrentMap::eraseIf
+     */
+    void removeSessionByConnection(const lsk_muduo::TcpConnectionPtr& conn);
 
     // ==================== 上行看门狗 ====================
     
@@ -198,10 +194,12 @@ private:
     
     lsk_muduo::EventLoop* loop_;                   ///< 事件循环（IO 线程）
     lsk_muduo::TcpServer server_;                  ///< TCP 服务器
+    ProtobufDispatcher dispatcher_;                ///< 消息分发器（模板化类型安全）
     
-    mutable std::mutex sessions_mutex_;  ///< 保护会话容器
-    std::map<std::string, AgvSessionPtr> sessions_;  ///< agv_id -> Session
-    std::map<std::string, lsk_muduo::TcpConnectionPtr> connections_;  ///< agv_id -> Connection
+    /// 会话容器：agv_id -> AgvSession（读写锁保护）
+    ConcurrentMap<std::string, AgvSession> sessions_;
+    /// 连接容器：agv_id -> TcpConnection（读写锁保护）
+    ConcurrentMap<std::string, lsk_muduo::TcpConnection> connections_;
 
     // ==================== 常量配置 ====================
     

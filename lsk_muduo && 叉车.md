@@ -91,7 +91,7 @@ Day 3-4：ConcurrentMap线程安全容器
 编写单元测试验证并发读写安全性
 Day 5-7：AgvSession与SessionManager
 定义AgvSession结构体（车辆ID、连接弱引用、位姿、状态）
-实现AgvSessionManager管理车辆上下线
+实现AgvSessionManager管理车辆上下线 
 集成到GatewayServer，连接时注册会话，断开时清理
 第4周：多客户端验证与心跳
 Day 1-2：MockAgvClient参数化改造
@@ -110,7 +110,7 @@ Server正确管理10个会话，Dispatcher正确分发消息
 主动断开Client后5秒内会话被清理
 ConcurrentMap和Dispatcher的单元测试全部通过
 
-迭代三：IO与业务分离（第5-6周）
+##### 迭代三：IO与业务分离（第5-6周）
 目标：实现快慢分离架构，IO线程处理高频遥测，Worker线程处理复杂业务。
 第5周：线程分离与Task投递
 Day 1-2：扩展Protobuf协议
@@ -143,7 +143,7 @@ Worker线程添加100ms sleep后，Telemetry处理不受影响
 LatencyMonitor能测量并输出RTT数据
 紧急制动指令延迟可测量
 
-迭代四：压测验证与收尾（第7-8周）
+##### 迭代四：压测验证与收尾（第7-8周）
 目标：完成可配置的压测模拟器，进行全面性能测试，输出文档和面试材料。
 第7周：压测模拟器与性能验证
 Day 1-3：LoadTester压测主程序（一次开发，多规模复用）

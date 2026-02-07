@@ -33,8 +33,8 @@ private:
     // kConnecting: 正在连接中（调用了 ::connect 但还没返回成功，正在 epoll_wait 写事件
     // kConnected: 连接已建立（一旦建立，Connector 的任务就完成了，控制权移交给 TcpConnection）
     enum States { kDisconnected, kConnecting, kConnected };
-    static const int kMaxRetryDelayMs = 30 * 1000;  // 最大重试延迟 30秒
-    static const int kInitRetryDelayMs = 500;       // 初始重试延迟 500毫秒
+    static constexpr int kMaxRetryDelayMs = 30 * 1000;  // 最大重试延迟 30秒
+    static constexpr int kInitRetryDelayMs = 500;       // 初始重试延迟 500毫秒
 
     void setState(States s) { state_ = s; }
     void startInLoop();

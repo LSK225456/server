@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 project(lsk_muduo VERSION 1.0.0 LANGUAGES CXX C)
 
 # ==================== 编译选项 ====================
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -37,8 +37,28 @@ message(STATUS "========================================")
 
 # ==================== 查找依赖 ====================
 find_package(Protobuf REQUIRED)
-find_package(GTest)
 find_package(Threads REQUIRED)
+
+# GTest: 优先查找系统安装，找不到则自动下载编译
+find_package(GTest QUIET)
+if(NOT GTEST_FOUND)
+    message(STATUS "System GTest not found, using FetchContent to download...")
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        release-1.11.0
+    )
+    # 防止 GTest 覆盖父项目的编译选项
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    # 设置变量让后续 if(GTEST_FOUND) 为真
+    set(GTEST_FOUND TRUE)
+    set(GTEST_LIBRARIES gtest gtest_main)
+    set(GTEST_INCLUDE_DIRS "${googletest_SOURCE_DIR}/googletest/include")
+    include_directories(${GTEST_INCLUDE_DIRS})
+endif()
 
 message(STATUS "Protobuf version: ${Protobuf_VERSION}")
 message(STATUS "Protobuf libraries: ${PROTOBUF_LIBRARIES}")

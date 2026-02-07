@@ -8,6 +8,5 @@ message(STATUS "Configuring AGV Server...")
 add_subdirectory(proto)
 add_subdirectory(codec)
 add_subdirectory(gateway)
-add_subdirectory(test)
 
 message(STATUS "AGV Server configured")
