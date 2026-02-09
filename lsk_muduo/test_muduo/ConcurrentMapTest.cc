@@ -249,6 +249,12 @@ TEST(ConcurrentMapTest, Keys) {
 TEST(ConcurrentMapTest, ConcurrentReadWrite) {
     ConcurrentMap<std::string, TestSession> map;
     
+    // 预先插入一些数据，确保读线程能找到数据
+    for (int i = 0; i < 1000; i++) {
+        std::string key = "INIT-" + std::to_string(i);
+        map.insert(key, std::make_shared<TestSession>(key, static_cast<double>(i)));
+    }
+    
     const int kNumWriters = 4;
     const int kNumReaders = 4;
     const int kOpsPerThread = 1000;
@@ -279,8 +285,8 @@ TEST(ConcurrentMapTest, ConcurrentReadWrite) {
         while (!startFlag.load()) { std::this_thread::yield(); }
         
         for (int i = 0; i < kOpsPerThread; i++) {
-            // 随机查找
-            std::string key = "AGV-0-" + std::to_string(i % kOpsPerThread);
+            // 读取预先插入的数据
+            std::string key = "INIT-" + std::to_string(i % 1000);
             auto result = map.find(key);
             if (result) {
                 readSuccessCount++;
@@ -323,8 +329,9 @@ TEST(ConcurrentMapTest, ConcurrentReadWrite) {
         << "所有写操作应完成";
     EXPECT_GT(readSuccessCount.load(), 0) << "应有读操作成功";
     
-    // 每个写线程写了 kOpsPerThread 条，删了一半，剩 kOpsPerThread/2
-    size_t expectedSize = kNumWriters * (kOpsPerThread / 2);
+    // 预先插入了1000条，写线程写了 kNumWriters * kOpsPerThread，删了各自的一半
+    // 最终 size = 1000 + kNumWriters * (kOpsPerThread / 2)
+    size_t expectedSize = 1000 + kNumWriters * (kOpsPerThread / 2);
     EXPECT_EQ(map.size(), expectedSize) 
         << "最终 size 应为 " << expectedSize;
     

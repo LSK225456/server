@@ -24,9 +24,11 @@ static inline double timeDifference(Timestamp high, Timestamp low) {
 
 GatewayServer::GatewayServer(EventLoop* loop,
                              const InetAddress& listen_addr,
-                             const std::string& name)
+                             const std::string& name,
+                             double session_timeout_sec)
     : loop_(loop),
-      server_(loop, listen_addr, name) {
+      server_(loop, listen_addr, name),
+      session_timeout_ms_(static_cast<int>(session_timeout_sec * 1000)) {
     
     // 注册 TcpServer 回调
     server_.setConnectionCallback(
@@ -38,7 +40,8 @@ GatewayServer::GatewayServer(EventLoop* loop,
     // 初始化消息分发器（注册所有消息类型的 handler）
     initDispatcher();
     
-    LOG_INFO << "GatewayServer created: " << name;
+    LOG_INFO << "GatewayServer created: " << name 
+             << " (session_timeout=" << session_timeout_sec << "s)";
 }
 
 GatewayServer::~GatewayServer() {
@@ -56,7 +59,7 @@ void GatewayServer::start() {
                     std::bind(&GatewayServer::onWatchdogTimer, this));
     
     LOG_INFO << "GatewayServer started (watchdog: " << kWatchdogIntervalMs
-             << "ms, timeout: " << kSessionTimeoutMs << "ms)";
+             << "ms, timeout: " << session_timeout_ms_ << "ms)";
 }
 
 // ==================== 消息分发器初始化 ====================
@@ -155,10 +158,10 @@ void GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
     const std::string& agv_id = msg.agv_id();
     
     // 查找或创建会话
-    AgvSessionPtr session = findSession(agv_id);
+    AgvSessionPtr session = sessionManager_.findSession(agv_id);
     if (!session) {
         registerSession(agv_id, conn);
-        session = findSession(agv_id);
+        session = sessionManager_.findSession(agv_id);
     }
     
     if (!session) {
@@ -179,48 +182,27 @@ void GatewayServer::handleHeartbeat(const TcpConnectionPtr& conn,
     LOG_DEBUG << "[SEND] Heartbeat response to [" << agv_id << "]";
 }
 
-// ==================== 会话管理实现（ConcurrentMap）====================
+// ==================== 会话管理实现（SessionManager）====================
 
 void GatewayServer::registerSession(const std::string& agv_id,
                                     const TcpConnectionPtr& conn) {
-    auto existingSession = sessions_.find(agv_id);
-    if (existingSession) {
-        LOG_WARN << "Session [" << agv_id << "] already exists, replacing";
-    }
-    
-    // 使用 ConcurrentMap::insert（插入或替换）
-    sessions_.insert(agv_id, std::make_shared<AgvSession>(agv_id));
-    connections_.insert(agv_id, conn);  // TcpConnectionPtr 就是 shared_ptr<TcpConnection>
-    
-    LOG_INFO << "Session registered: [" << agv_id << "] from "
-             << conn->peerAddress().toIpPort();
+    // 委托给 SessionManager
+    sessionManager_.registerSession(agv_id, conn);
 }
 
 void GatewayServer::removeSession(const std::string& agv_id) {
-    sessions_.erase(agv_id);
-    connections_.erase(agv_id);
-    LOG_INFO << "Session removed: [" << agv_id << "]";
+    // 委托给 SessionManager
+    sessionManager_.removeSession(agv_id);
 }
 
 AgvSessionPtr GatewayServer::findSession(const std::string& agv_id) {
-    return sessions_.find(agv_id);
+    // 委托给 SessionManager
+    return sessionManager_.findSession(agv_id);
 }
 
 void GatewayServer::removeSessionByConnection(const TcpConnectionPtr& conn) {
-    // 先收集要删除的 agv_id（避免在遍历中修改另一个 ConcurrentMap）
-    std::vector<std::string> toRemove;
-    
-    connections_.forEach([&conn, &toRemove](const std::string& agv_id,
-                                            const std::shared_ptr<lsk_muduo::TcpConnection>& storedConn) {
-        if (storedConn.get() == conn.get()) {
-            toRemove.push_back(agv_id);
-        }
-    });
-    
-    for (const auto& agv_id : toRemove) {
-        LOG_WARN << "AGV [" << agv_id << "] connection lost, removing session";
-        removeSession(agv_id);
-    }
+    // 委托给 SessionManager
+    sessionManager_.removeSessionByConnection(conn);
 }
 
 // ==================== 上行看门狗实现 ====================
@@ -228,18 +210,18 @@ void GatewayServer::removeSessionByConnection(const TcpConnectionPtr& conn) {
 void GatewayServer::onWatchdogTimer() {
     Timestamp now = Timestamp::now();
     
-    // 使用 ConcurrentMap::forEach 安全遍历（读锁保护）
-    sessions_.forEach([&now, this](const std::string& agv_id,
-                                    const AgvSessionPtr& session) {
+    // 使用 SessionManager::forEach 安全遍历（读锁保护）
+    sessionManager_.forEach([&now, this](const std::string& agv_id,
+                                          const AgvSessionPtr& session) {
         // 计算距离最后活跃时间的间隔（毫秒）
         double elapsed_sec = timeDifference(now, session->getLastActiveTime());
         int64_t elapsed_ms = static_cast<int64_t>(elapsed_sec * 1000);
         
         // 超时检测
-        if (elapsed_ms > kSessionTimeoutMs && session->getState() == AgvSession::ONLINE) {
+        if (elapsed_ms > session_timeout_ms_ && session->getState() == AgvSession::ONLINE) {
             session->setState(AgvSession::OFFLINE);
             LOG_ERROR << "[WATCHDOG ALARM] AGV [" << agv_id << "] OFFLINE (timeout="
-                      << elapsed_ms << "ms > " << kSessionTimeoutMs << "ms)";
+                      << elapsed_ms << "ms > " << session_timeout_ms_ << "ms)";
         }
     });
 }

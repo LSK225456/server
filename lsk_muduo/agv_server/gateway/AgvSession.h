@@ -2,6 +2,7 @@
 #define LSK_MUDUO_GATEWAY_AGV_SESSION_H
 
 #include "../../muduo/base/Timestamp.h"
+#include "../../muduo/net/TcpConnection.h"
 #include <string>
 #include <memory>
 #include <mutex>
@@ -46,7 +47,18 @@ public:
 
     // ==================== 构造与析构 ====================
     
-    explicit AgvSession(const std::string& id);
+    /**
+     * @brief 构造函数
+     * @param id 车辆唯一标识符
+     * @param conn 连接对象（存储为 weak_ptr）
+     * 
+     * @note 存储弱引用而非强引用的原因：
+     *       - 避免循环引用：TcpConnection 可能在其 context 中持有 Session
+     *       - 不阻止连接关闭：连接断开时，TcpConnection 应能正常析构
+     *       - 使用时通过 lock() 检查连接是否仍有效
+     */
+    AgvSession(const std::string& id,
+               const std::shared_ptr<lsk_muduo::TcpConnection>& conn);
     ~AgvSession() = default;
 
     // 禁止拷贝，允许移动
@@ -94,6 +106,22 @@ public:
     Pose getPose() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return pose_;
+    }
+
+    /**
+     * @brief 获取连接对象（提升为 shared_ptr）
+     * @return shared_ptr 如果连接仍然有效，否则返回空指针
+     * 
+     * @note 使用方式：
+     *       auto conn = session->getConnection();
+     *       if (conn) {
+     *           // 连接有效，可以安全使用
+     *           conn->send(data);
+     *       }
+     */
+    std::shared_ptr<lsk_muduo::TcpConnection> getConnection() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return conn_.lock();  // 将 weak_ptr 提升为 shared_ptr
     }
 
     // ==================== 线程安全的 Setters ====================
@@ -145,6 +173,19 @@ public:
         state_ = state;
     }
 
+    /**
+     * @brief 更新连接对象
+     * @param conn 新的连接对象
+     * 
+     * @note 使用场景：
+     *       - 车辆重连时，更新会话关联的连接
+     *       - 典型场景：车辆离线后重新上线，复用原有会话
+     */
+    void setConnection(const std::shared_ptr<lsk_muduo::TcpConnection>& conn) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        conn_ = conn;  // 存储弱引用
+    }
+
 private:
     // ==================== 不可变字段（无需加锁）====================
     
@@ -152,11 +193,12 @@ private:
 
     // ==================== 可变字段（需加锁保护）====================
     
-    mutable std::mutex mutex_;        ///< 互斥锁，保护以下字段
-    lsk_muduo::Timestamp  last_active_time_;       ///< 最后活跃时间（看门狗用）
-    double battery_level_;             ///< 电池电量 [0.0, 100.0]
-    State state_;                      ///< 当前状态
-    Pose pose_;                        ///< 位姿信息（预留）
+    mutable std::mutex mutex_;                              ///< 互斥锁，保护以下字段
+    std::weak_ptr<lsk_muduo::TcpConnection> conn_;          ///< 连接弱引用（符合文档要求）
+    lsk_muduo::Timestamp  last_active_time_;                ///< 最后活跃时间（看门狗用）
+    double battery_level_;                                  ///< 电池电量 [0.0, 100.0]
+    State state_;                                           ///< 当前状态
+    Pose pose_;                                             ///< 位姿信息（预留）
 };
 
 /// 会话智能指针类型

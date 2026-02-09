@@ -5,8 +5,8 @@
 #include "../../muduo/net/EventLoop.h"
 #include "../../muduo/net/Buffer.h"
 #include "AgvSession.h"
+#include "SessionManager.h"
 #include "ProtobufDispatcher.h"
-#include "ConcurrentMap.h"
 #include "../proto/message.pb.h"
 #include "../proto/common.pb.h"
 #include "../proto/message_id.h"
@@ -28,8 +28,8 @@ namespace gateway {
  * 
  * @note 迭代二重构：
  *       - 消息分发：ProtobufDispatcher 模板化类型安全分发（替换 switch-case）
- *       - 会话管理：ConcurrentMap<string, AgvSession> 读写锁保护（替换 std::map + mutex）
- *       - 连接管理：ConcurrentMap<string, TcpConnection> 管理 agv_id 到连接的映射
+ *       - 会话管理：SessionManager 封装会话生命周期管理
+ *       - AgvSession：持有连接弱引用（weak_ptr<TcpConnection>），符合文档要求
  * 
  * @note 架构设计：
  *       - 单 Reactor 模式：IO 线程 == EventLoop 线程
@@ -44,10 +44,12 @@ public:
      * @param loop 事件循环（必须在 IO 线程创建）
      * @param listen_addr 监听地址（端口）
      * @param name 服务器名称（用于日志）
+     * @param session_timeout_sec 会话超时时间（秒），默认 5.0s（迭代二要求）
      */
     GatewayServer(lsk_muduo::EventLoop* loop,
                   const lsk_muduo::InetAddress& listen_addr,
-                  const std::string& name);
+                  const std::string& name,
+                  double session_timeout_sec = 5.0);
     
     ~GatewayServer();
 
@@ -118,12 +120,12 @@ private:
     void handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
                          const proto::Heartbeat& msg);
 
-    // ==================== 会话管理（ConcurrentMap）====================
+    // ==================== 会话管理（SessionManager）====================
     
     /**
      * @brief 注册新会话
      * @note 首次收到该 agv_id 的消息时调用
-     * @note 线程安全：ConcurrentMap 内部持有读写锁
+     * @note 线程安全：SessionManager 内部持有读写锁
      */
     void registerSession(const std::string& agv_id,
                          const lsk_muduo::TcpConnectionPtr& conn);
@@ -143,14 +145,12 @@ private:
 
     /**
      * @brief 根据连接对象反查 agv_id 并移除会话
-     * @note 连接断开时调用，使用 ConcurrentMap::eraseIf
+     * @note 连接断开时调用，使用 SessionManager::removeSessionByConnection
      */
     void removeSessionByConnection(const lsk_muduo::TcpConnectionPtr& conn);
 
-    // ==================== 上行看门狗 ====================
-    
     /**
-     * @brief 看门狗定时器回调（100ms 周期）
+     * @brief 上行看门狗定时器回调（100ms 周期）
      * @note Timer 线程调用
      * @note 逻辑：遍历所有 Session，检查 last_active_time
      *       若超过 1000ms，标记为 OFFLINE 并打印报警日志
@@ -196,15 +196,15 @@ private:
     lsk_muduo::TcpServer server_;                  ///< TCP 服务器
     ProtobufDispatcher dispatcher_;                ///< 消息分发器（模板化类型安全）
     
-    /// 会话容器：agv_id -> AgvSession（读写锁保护）
-    ConcurrentMap<std::string, AgvSession> sessions_;
-    /// 连接容器：agv_id -> TcpConnection（读写锁保护）
-    ConcurrentMap<std::string, lsk_muduo::TcpConnection> connections_;
+    /// 会话管理器（封装会话 CRUD 操作，线程安全）
+    SessionManager sessionManager_;
+    
+    /// 可配置的超时参数（毫秒）
+    int session_timeout_ms_;
 
-    // ==================== 常量配置 ====================
+    // ====================  常量配置 ====================
     
     static constexpr int kWatchdogIntervalMs = 100;   ///< 看门狗周期（毫秒）
-    static constexpr int kSessionTimeoutMs = 1000;    ///< 会话超时时间（毫秒）
     static constexpr double kLowBatteryThreshold = 20.0;  ///< 低电量阈值（%）
 };
 

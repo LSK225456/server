@@ -4,6 +4,7 @@ message(STATUS "Configuring Gateway module...")
 
 set(GATEWAY_SRCS
     AgvSession.cc
+    SessionManager.cc
     GatewayServer.cc
 )
 

@@ -55,6 +55,7 @@ public:
      * @param agv_id 车辆唯一标识符
      * @param telemetry_freq 遥测发送频率（Hz），默认 50Hz
      * @param initial_battery 初始电量（%），默认 100.0，用于快速测试低电量场景
+     * @param watchdog_timeout 看门狗超时时间（秒），默认 5.0s（迭代二要求）
      * 
      * @note 构造后调用 connect() 连接服务器
      */
@@ -62,7 +63,8 @@ public:
                   const lsk_muduo::InetAddress& server_addr,
                   const std::string& agv_id,
                   double telemetry_freq = 50.0,
-                  double initial_battery = 100.0);
+                  double initial_battery = 100.0,
+                  double watchdog_timeout = 5.0);
     
     ~MockAgvClient();
 
@@ -236,12 +238,12 @@ private:
 
     // 看门狗
     lsk_muduo::Timestamp last_server_msg_time_;  ///< 最后收到服务器消息的时间
+    double watchdog_timeout_sec_;                ///< 看门狗超时（秒），可配置
 
     // 常量配置
     static constexpr double kHeartbeatIntervalSec = 0.5;      ///< 心跳间隔（秒）
     static constexpr double kBatteryUpdateIntervalSec = 1.0;  ///< 电量更新间隔（秒）
     static constexpr double kWatchdogCheckIntervalSec = 0.1;  ///< 看门狗检查间隔（秒）
-    static constexpr double kWatchdogTimeoutSec = 1.0;        ///< 看门狗超时（秒）
     static constexpr double kMovingToChargerDelaySec = 3.0;   ///< 移动到充电点的延迟（秒）
 
     // 电量变化率（%/秒）

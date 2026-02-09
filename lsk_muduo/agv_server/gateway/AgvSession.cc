@@ -3,8 +3,10 @@
 namespace agv {
 namespace gateway {
 
-AgvSession::AgvSession(const std::string& id)
+AgvSession::AgvSession(const std::string& id,
+                       const std::shared_ptr<lsk_muduo::TcpConnection>& conn)
     : agv_id_(id),
+      conn_(conn),  // 存储弱引用
       last_active_time_(lsk_muduo::Timestamp::now()),
       battery_level_(100.0),
       state_(ONLINE),

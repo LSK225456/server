@@ -11,7 +11,8 @@ MockAgvClient::MockAgvClient(EventLoop* loop,
                              const InetAddress& server_addr,
                              const std::string& agv_id,
                              double telemetry_freq,
-                             double initial_battery)
+                             double initial_battery,
+                             double watchdog_timeout)
     : loop_(loop),
       client_(loop, server_addr, "MockAGV-" + agv_id),
       agv_id_(agv_id),
@@ -23,7 +24,8 @@ MockAgvClient::MockAgvClient(EventLoop* loop,
       theta_(0.0),
       telemetry_freq_(telemetry_freq),
       telemetry_interval_(1.0 / telemetry_freq),
-      last_server_msg_time_(Timestamp::now()) {
+      last_server_msg_time_(Timestamp::now()),
+      watchdog_timeout_sec_(watchdog_timeout) {
     
     // 设置 TcpClient 回调
     client_.setConnectionCallback(
@@ -32,7 +34,8 @@ MockAgvClient::MockAgvClient(EventLoop* loop,
         std::bind(&MockAgvClient::onMessage, this,
                   std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] Created (freq=" << telemetry_freq << "Hz)";
+    LOG_INFO << "[MockAGV-" << agv_id_ << "] Created (freq=" << telemetry_freq 
+             << "Hz, watchdog_timeout=" << watchdog_timeout << "s)";
 }
 
 MockAgvClient::~MockAgvClient() {
@@ -249,11 +252,11 @@ void MockAgvClient::onWatchdogTimer() {
     double elapsed_sec = (now.microSecondsSinceEpoch() - 
                          last_server_msg_time_.microSecondsSinceEpoch()) / 1000000.0;
     
-    if (elapsed_sec > kWatchdogTimeoutSec && state_ != E_STOP) {
+    if (elapsed_sec > watchdog_timeout_sec_ && state_ != E_STOP) {
         LOG_ERROR << "[WATCHDOG] [MockAGV-" << agv_id_ 
                   << "] ⚠️ [EMERGENCY] Server Lost! "
                   << "(timeout=" << elapsed_sec << "s > " 
-                  << kWatchdogTimeoutSec << "s)";
+                  << watchdog_timeout_sec_ << "s)";
         setState(E_STOP);
     }
 }
