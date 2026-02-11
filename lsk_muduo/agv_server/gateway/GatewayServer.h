@@ -4,9 +4,11 @@
 #include "../../muduo/net/TcpServer.h"
 #include "../../muduo/net/EventLoop.h"
 #include "../../muduo/net/Buffer.h"
+#include "../../muduo/base/ThreadPool.h"
 #include "AgvSession.h"
 #include "SessionManager.h"
 #include "ProtobufDispatcher.h"
+#include "WorkerTask.h"
 #include "../proto/message.pb.h"
 #include "../proto/common.pb.h"
 #include "../proto/message_id.h"
@@ -31,9 +33,10 @@ namespace gateway {
  *       - 会话管理：SessionManager 封装会话生命周期管理
  *       - AgvSession：持有连接弱引用（weak_ptr<TcpConnection>），符合文档要求
  * 
- * @note 架构设计：
- *       - 单 Reactor 模式：IO 线程 == EventLoop 线程
- *       - 迭代三会改为 Reactor + Worker 线程池
+ * @note 架构设计（迭代三升级）：
+ *       - Reactor + Worker 模式：IO 线程处理高频消息，Worker 线程处理耗时业务
+ *       - IO 线程：Telemetry/Heartbeat 直接处理（更新内存）
+ *       - Worker 线程：NavigationTask（数据库操作）投递到 ThreadPool
  */
 class GatewayServer {
 public:
@@ -45,11 +48,13 @@ public:
      * @param listen_addr 监听地址（端口）
      * @param name 服务器名称（用于日志）
      * @param session_timeout_sec 会话超时时间（秒），默认 5.0s（迭代二要求）
+     * @param worker_threads Worker 线程数，默认 4（迭代三新增）
      */
     GatewayServer(lsk_muduo::EventLoop* loop,
                   const lsk_muduo::InetAddress& listen_addr,
                   const std::string& name,
-                  double session_timeout_sec = 5.0);
+                  double session_timeout_sec = 5.0,
+                  int worker_threads = 4);
     
     ~GatewayServer();
 
@@ -117,7 +122,18 @@ private:
      * @note 中频消息（1Hz）
      * @note 逻辑：刷新 last_active_time
      */
-    void handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
+    v**
+     * @brief 处理导航任务（MSG_NAVIGATION_TASK）【迭代三新增】
+     * @note 低频消息（事件驱动）
+     * @note 逻辑：
+     *       1. 构造 WorkerTask（弱引用连接、强引用会话、消息）
+     *       2. 投递到 Worker 线程池（模拟数据库写入 50ms）
+     *       3. Worker 完成后通过 runInLoop 回到 IO 线程发送响应
+     */
+    void handleNavigationTask(const lsk_muduo::TcpConnectionPtr& conn,
+                              const proto::NavigationTask& msg);
+
+    /oid handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
                          const proto::Heartbeat& msg);
 
     // ==================== 会话管理（SessionManager）====================
@@ -178,6 +194,32 @@ private:
      * @note 封装流程：Protobuf 序列化 -> 构造 LengthHeader -> 发送
      */
     void sendProtobufMessage(const lsk_muduo::TcpConnectionPtr& conn,
+    // ==================== Worker 线程任务处理【迭代三新增】====================
+    
+    /**
+     * @brief Worker 线程任务处理函数
+     * @param task 任务对象（包含连接、会话、消息、时间戳）
+     * 
+     * @note Worker 线程调用（非 IO 线程）
+     * @note 核心流程：
+     *       1. 检查连接有效性（task.getConnection()）
+     *       2. 模拟数据库操作（usleep(50000) = 50ms）
+     *       3. 通过 runInLoop 回到 IO 线程发送响应
+     */
+    
+    /// Worker 线程池（迭代三新增，处理耗时业务）
+    std::unique_ptr<ThreadPool> worker_pool_;
+    void processWorkerTask(const std::shared_ptr<WorkerTask>& task);
+    
+    /**
+     * @brief 模拟数据库写入操作
+     * @param msg NavigationTask 消息
+     * 
+     * @note Worker 线程调用
+     * @note 模拟场景：存储任务到 MySQL/InfluxDB（用于事故回溯和数字孪生）
+     */
+    void simulateDatabaseWrite(const proto::NavigationTask& msg);
+
                              uint16_t msg_type,
                              const google::protobuf::Message& message);
 

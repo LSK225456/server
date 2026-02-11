@@ -2,6 +2,7 @@
 #include "../../muduo/base/Logger.h"
 #include "../codec/LengthHeaderCodec.h"
 #include "../../muduo/net/TimerId.h"
+#include <unistd.h>  // usleep
 
 namespace agv {
 namespace gateway {
@@ -25,10 +26,12 @@ static inline double timeDifference(Timestamp high, Timestamp low) {
 GatewayServer::GatewayServer(EventLoop* loop,
                              const InetAddress& listen_addr,
                              const std::string& name,
-                             double session_timeout_sec)
+                             double session_timeout_sec,
+                             int worker_threads)
     : loop_(loop),
       server_(loop, listen_addr, name),
-      session_timeout_ms_(static_cast<int>(session_timeout_sec * 1000)) {
+      session_timeout_ms_(static_cast<int>(session_timeout_sec * 1000)),
+      worker_pool_(new ThreadPool("WorkerPool")) {
     
     // 注册 TcpServer 回调
     server_.setConnectionCallback(
@@ -40,11 +43,24 @@ GatewayServer::GatewayServer(EventLoop* loop,
     // 初始化消息分发器（注册所有消息类型的 handler）
     initDispatcher();
     
+    // 启动 Worker 线程池（迭代三新增）
+    if (worker_threads > 0) {
+        worker_pool_->start(worker_threads);
+        LOG_INFO << "Worker thread pool started with " << worker_threads << " threads";
+    } else {
+        LOG_WARN << "Worker thread pool disabled (worker_threads=0)";
+    }
+    
     LOG_INFO << "GatewayServer created: " << name 
-             << " (session_timeout=" << session_timeout_sec << "s)";
+             << " (session_timeout=" << session_timeout_sec << "s, worker_threads=" << worker_threads << ")";
 }
 
 GatewayServer::~GatewayServer() {
+    // 停止 Worker 线程池
+    if (worker_pool_) {
+        worker_pool_->stop();
+        LOG_INFO << "Worker thread pool stopped";
+    }
     LOG_INFO << "GatewayServer destroyed";
 }
 
@@ -75,6 +91,12 @@ void GatewayServer::initDispatcher() {
     dispatcher_.registerHandler<proto::Heartbeat>(
         proto::MSG_HEARTBEAT,
         std::bind(&GatewayServer::handleHeartbeat, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    
+    // 【迭代三新增】注册导航任务处理器
+    dispatcher_.registerHandler<proto::NavigationTask>(
+        proto::MSG_NAVIGATION_TASK,
+        std::bind(&GatewayServer::handleNavigationTask, this,
                   std::placeholders::_1, std::placeholders::_2));
     
     // 设置默认回调（处理未注册的消息类型）
@@ -279,6 +301,96 @@ void GatewayServer::sendChargeCommand(const std::string& agv_id,
     sendProtobufMessage(conn, proto::MSG_AGV_COMMAND, cmd);
     
     LOG_INFO << "[SEND] Charge command to [" << agv_id << "]";
+}
+
+// ==================== Worker 线程任务处理【迭代三新增】====================
+
+void GatewayServer::handleNavigationTask(const TcpConnectionPtr& conn,
+                                         const proto::NavigationTask& msg) {
+    const std::string& agv_id = msg.target_agv_id();
+    
+    LOG_INFO << "[IO THREAD] Received NavigationTask for [" << agv_id 
+             << "] task_id=" << msg.task_id() << ", submitting to Worker";
+    
+    // 1. 查找会话
+    AgvSessionPtr session = findSession(agv_id);
+    if (!session) {
+        LOG_WARN << "Session not found for AGV [" << agv_id << "], creating new";
+        registerSession(agv_id, conn);
+        session = findSession(agv_id);
+    }
+    
+    if (!session) {
+        LOG_ERROR << "Failed to create session for AGV [" << agv_id << "]";
+        return;
+    }
+    
+    // 2. 构造 WorkerTask（强类型，无需重新序列化）
+    auto task = std::make_shared<WorkerTask>(
+        conn,  // TcpConnectionPtr -> TcpConnectionWeakPtr 自动转换
+        session,
+        std::make_shared<proto::NavigationTask>(msg),  // 拷贝消息到 shared_ptr
+        proto::MSG_NAVIGATION_TASK
+    );
+    
+    // 3. 投递到 Worker 线程池（避免阻塞 IO 线程）
+    worker_pool_->run([task, this]() {
+        this->processWorkerTask(task);
+    });
+    
+    LOG_DEBUG << "[IO THREAD] Task submitted, queue_latency=" 
+              << task->getQueueLatencyMs() << "ms";
+}
+
+void GatewayServer::processWorkerTask(const std::shared_ptr<WorkerTask>& task) {
+    LOG_INFO << "[WORKER THREAD] Processing task (type=0x" << std::hex << task->msg_type 
+             << std::dec << ", queue_latency=" << task->getQueueLatencyMs() << "ms)";
+    
+    // 1. 检查连接有效性（弱引用提升）
+    auto conn = task->getConnection();
+    if (!conn) {
+        LOG_WARN << "[WORKER THREAD] Connection closed, task cancelled";
+        return;
+    }
+    
+    // 2. 类型安全的消息提取
+    auto nav_task = task->getMessage<proto::NavigationTask>();
+    if (!nav_task) {
+        LOG_ERROR << "[WORKER THREAD] Failed to cast message to NavigationTask";
+        return;
+    }
+    
+    // 3. 模拟数据库写入操作（阻塞 50ms）
+    simulateDatabaseWrite(*nav_task);
+    
+    // 4. 通过 runInLoop 回到 IO 线程发送响应
+    loop_->runInLoop([conn, nav_task, this]() {
+        // 构造响应消息
+        proto::CommonResponse response;
+        response.set_status(proto::STATUS_OK);
+        response.set_message("NavigationTask accepted");
+        response.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+        
+        // 发送响应
+        sendProtobufMessage(conn, proto::MSG_COMMON_RESPONSE, response);
+        
+        LOG_INFO << "[IO THREAD] Response sent for task_id=" << nav_task->task_id();
+    });
+}
+
+void GatewayServer::simulateDatabaseWrite(const proto::NavigationTask& msg) {
+    LOG_INFO << "[WORKER THREAD] Simulating database write for task_id=" << msg.task_id();
+    LOG_INFO << "  Target AGV: " << msg.target_agv_id();
+    LOG_INFO << "  Target Point: (" << msg.target_node().x() << ", " 
+             << msg.target_node().y() << ")";
+    LOG_INFO << "  Operation: " << msg.operation();
+    LOG_INFO << "  Path Points: " << msg.global_path_size();
+    
+    // 模拟数据库写入延迟（50ms = 50000 微秒）
+    // 替代原文档中的"A*路径规划"，改为"存储到 MySQL/InfluxDB"
+    usleep(50000);  // 50ms
+    
+    LOG_INFO << "[WORKER THREAD] Database write completed (simulated 50ms)";
 }
 
 }  // namespace gateway

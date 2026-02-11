@@ -144,6 +144,20 @@ target_link_libraries(multi_client_test
     pthread
 )
 
+# 11. Worker Task Test（迭代三：Day 3-4）
+add_executable(worker_task_test
+    WorkerTaskTest.cc
+)
+target_link_libraries(worker_task_test
+    agv_gateway
+    agv_codec
+    agv_proto
+    lsk_muduo_net
+    lsk_muduo_base
+    ${PROTOBUF_LIBRARIES}
+    pthread
+)
+
 # ==================== 输出目录配置 ====================
 
 if(GTEST_FOUND)
@@ -160,6 +174,7 @@ if(GTEST_FOUND)
         quick_verify_test
         gateway_main
         multi_client_test
+        worker_task_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
     )
 else()
@@ -170,6 +185,7 @@ else()
         quick_verify_test
         gateway_main
         multi_client_test
+        worker_task_test
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
     )
 endif()
@@ -188,13 +204,15 @@ if(GTEST_FOUND)
     message(STATUS "  - mock_agv_client_test (迭代一)")
     message(STATUS "  - heartbeat_test (迭代二 Day 3-4)")
     message(STATUS "  - agv_client_main (迭代二 Day 1-2)")
-    message(STATUS "  - gateway_main (迭代二 Day 5-7)")
-    message(STATUS "  - multi_client_test (迭代二 Day 5-7)")
+    message(STATUS "  - worker_task_test (迭代三 Day 3-4)")
 else()
     message(STATUS "Test module configured (without GTest):")
     message(STATUS "  - mock_agv_client_test (迭代一)")
     message(STATUS "  - heartbeat_test (迭代二 Day 3-4)")
     message(STATUS "  - agv_client_main (迭代二 Day 1-2)")
+    message(STATUS "  - gateway_main (迭代二 Day 5-7)")
+    message(STATUS "  - multi_client_test (迭代二 Day 5-7)")
+    message(STATUS "  - worker_task_test (迭代三 Day 3-4)
     message(STATUS "  - gateway_main (迭代二 Day 5-7)")
     message(STATUS "  - multi_client_test (迭代二 Day 5-7)")
 endif()

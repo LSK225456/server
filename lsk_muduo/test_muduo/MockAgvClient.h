@@ -138,6 +138,12 @@ private:
      */
     void handleHeartbeat(const agv::proto::Heartbeat& msg);
 
+    /**
+     * @brief 处理 NavigationTask【迭代三新增】
+     * @note 模拟执行导航任务（3秒后完成）
+     */
+    void handleNavigationTask(const agv::proto::NavigationTask& task);
+
     // ==================== 定时任务 ====================
     
     /**

@@ -25,6 +25,7 @@ enum CommandType {
     CMD_RESUME         = 1;  // 恢复运行
     CMD_PAUSE          = 2;  // 暂停
     CMD_REBOOT         = 3;  // 重启系统
+    CMD_NAVIGATE_TO    = 4;  // 导航指令（迭代三新增）
 }
 
 /**

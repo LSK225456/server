@@ -140,6 +140,15 @@ void MockAgvClient::handleProtobufMessage(uint16_t msg_type,
             handleHeartbeat(msg);
             break;
         }
+        case MSG_NAVIGATION_TASK: {  // 【迭代三新增】
+            NavigationTask task;
+            if (!task.ParseFromArray(payload, static_cast<int>(len))) {
+                LOG_ERROR << "[MockAGV-" << agv_id_ << "] Failed to parse NavigationTask";
+                return;
+            }
+            handleNavigationTask(task);
+            break;
+        }
         default:
             LOG_WARN << "[MockAGV-" << agv_id_ << "] Unknown message type: 0x" 
                      << std::hex << msg_type << std::dec;
@@ -195,6 +204,33 @@ void MockAgvClient::handleHeartbeat(const Heartbeat& msg) {
     (void)msg;
     LOG_DEBUG << "[MockAGV-" << agv_id_ << "] [RECV] Heartbeat response from server";
     // 看门狗已在 onMessage 中刷新，无需额外处理
+}
+
+void MockAgvClient::handleNavigationTask(const NavigationTask& task) {
+    LOG_INFO << "[MockAGV-" << agv_id_ << "] [RECV] NavigationTask: task_id=" << task.task_id();
+    LOG_INFO << "  Target: (" << task.target_node().x() << ", " << task.target_node().y() << ")";
+    LOG_INFO << "  Operation: " << OperationType_Name(task.operation());
+    LOG_INFO << "  Path points: " << task.global_path_size();
+    
+    // 模拟执行导航任务：
+    // 1. 切换到 MOVING 状态
+    // 2. 3秒后切换回 IDLE（模拟任务完成）
+    setState(MOVING);
+    
+    // 延迟任务：3秒后恢复到 IDLE
+    loop_->runAfter(3.0, [this, task_id = task.task_id()]() {
+        if (state_ == MOVING) {
+            LOG_INFO << "[MockAGV-" << agv_id_ << "] NavigationTask completed: task_id=" << task_id;
+            setState(IDLE);
+            
+            // 可选：发送 TaskFeedback（迭代三后续完善）
+            // TaskFeedback feedback;
+            // feedback.set_agv_id(agv_id_);
+            // feedback.set_task_id(task_id);
+            // feedback.set_status(TASK_COMPLETED);
+            // sendProtobufMessage(MSG_TASK_FEEDBACK, feedback);
+        }
+    });
 }
 
 // ==================== 定时任务实现 ====================
