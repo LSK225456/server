@@ -122,7 +122,10 @@ private:
      * @note 中频消息（1Hz）
      * @note 逻辑：刷新 last_active_time
      */
-    v**
+    void handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
+                         const proto::Heartbeat& msg);
+
+    /**
      * @brief 处理导航任务（MSG_NAVIGATION_TASK）【迭代三新增】
      * @note 低频消息（事件驱动）
      * @note 逻辑：
@@ -132,9 +135,6 @@ private:
      */
     void handleNavigationTask(const lsk_muduo::TcpConnectionPtr& conn,
                               const proto::NavigationTask& msg);
-
-    /oid handleHeartbeat(const lsk_muduo::TcpConnectionPtr& conn,
-                         const proto::Heartbeat& msg);
 
     // ==================== 会话管理（SessionManager）====================
     
@@ -194,6 +194,17 @@ private:
      * @note 封装流程：Protobuf 序列化 -> 构造 LengthHeader -> 发送
      */
     void sendProtobufMessage(const lsk_muduo::TcpConnectionPtr& conn,
+                             uint16_t msg_type,
+                             const google::protobuf::Message& message);
+
+    /**
+     * @brief 下发充电指令
+     * @note 简化实现：发送 AgvCommand（类型 EMERGENCY_STOP）
+     * @note 迭代三完善：发送 NavigationTask（目标 "CHARGER"）
+     */
+    void sendChargeCommand(const std::string& agv_id,
+                          const lsk_muduo::TcpConnectionPtr& conn);
+
     // ==================== Worker 线程任务处理【迭代三新增】====================
     
     /**
@@ -206,9 +217,6 @@ private:
      *       2. 模拟数据库操作（usleep(50000) = 50ms）
      *       3. 通过 runInLoop 回到 IO 线程发送响应
      */
-    
-    /// Worker 线程池（迭代三新增，处理耗时业务）
-    std::unique_ptr<ThreadPool> worker_pool_;
     void processWorkerTask(const std::shared_ptr<WorkerTask>& task);
     
     /**
@@ -219,17 +227,6 @@ private:
      * @note 模拟场景：存储任务到 MySQL/InfluxDB（用于事故回溯和数字孪生）
      */
     void simulateDatabaseWrite(const proto::NavigationTask& msg);
-
-                             uint16_t msg_type,
-                             const google::protobuf::Message& message);
-
-    /**
-     * @brief 下发充电指令
-     * @note 简化实现：发送 AgvCommand（类型 EMERGENCY_STOP）
-     * @note 迭代三完善：发送 NavigationTask（目标 "CHARGER"）
-     */
-    void sendChargeCommand(const std::string& agv_id,
-                          const lsk_muduo::TcpConnectionPtr& conn);
 
 private:
     // ==================== 成员变量 ====================
@@ -243,6 +240,9 @@ private:
     
     /// 可配置的超时参数（毫秒）
     int session_timeout_ms_;
+    
+    /// Worker 线程池（迭代三新增，处理耗时业务）
+    std::unique_ptr<ThreadPool> worker_pool_;
 
     // ====================  常量配置 ====================
     
