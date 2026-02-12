@@ -68,12 +68,21 @@ TEST(CodecTest, MultipleMessages) {
     EXPECT_EQ(buf.readableBytes(), 0u);
 }
 
-// 测试空负载
+// 测试空负载（Protobuf 消息所有字段为默认值时序列化结果为空，属于合法场景）
 TEST(CodecTest, EmptyPayload) {
     Buffer buf;
     
-    // 空负载应该编码失败
-    EXPECT_FALSE(LengthHeaderCodec::encode(&buf, 0x1001, ""));
+    // 空负载应该编码成功（仅包含 8 字节包头）
+    EXPECT_TRUE(LengthHeaderCodec::encode(&buf, 0x1001, ""));
+    EXPECT_EQ(buf.readableBytes(), LengthHeaderCodec::kHeaderLen);
+    
+    // 解码回来
+    EXPECT_TRUE(LengthHeaderCodec::hasCompleteMessage(&buf));
+    uint16_t type = 0;
+    std::string payload;
+    EXPECT_TRUE(LengthHeaderCodec::decode(&buf, &type, &payload));
+    EXPECT_EQ(type, 0x1001);
+    EXPECT_TRUE(payload.empty());
 }
 
 int main(int argc, char** argv) {

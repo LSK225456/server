@@ -9,6 +9,7 @@
 #include "SessionManager.h"
 #include "ProtobufDispatcher.h"
 #include "WorkerTask.h"
+#include "LatencyMonitor.h"
 #include "../proto/message.pb.h"
 #include "../proto/common.pb.h"
 #include "../proto/message_id.h"
@@ -74,6 +75,24 @@ public:
         server_.setThreadNum(num_threads);
     }
 
+    /**
+     * @brief 设置延迟探测间隔（必须在 start() 前调用）
+     * @param seconds 探测间隔（秒），默认 5.0
+     */
+    void setLatencyProbeInterval(double seconds) {
+        latency_probe_interval_sec_ = seconds;
+    }
+
+    /**
+     * @brief 获取延迟监控器（只读，用于查询 RTT 统计）
+     */
+    const LatencyMonitor& getLatencyMonitor() const { return latency_monitor_; }
+
+    /**
+     * @brief 获取会话管理器（只读，用于测试验证）
+     */
+    const SessionManager& getSessionManager() const { return sessionManager_; }
+
 private:
     // ==================== TcpServer 回调 ====================
     
@@ -136,6 +155,26 @@ private:
     void handleNavigationTask(const lsk_muduo::TcpConnectionPtr& conn,
                               const proto::NavigationTask& msg);
 
+    /**
+     * @brief 处理系统指令（MSG_AGV_COMMAND）【迭代三第6周新增】
+     * @note IO 线程直接处理（透传，不进 Worker 队列）
+     * @note 核心流程：
+     *       1. 查找目标车辆会话（target_agv_id）
+     *       2. 直接通过目标连接转发 AgvCommand
+     *       3. 记录处理延迟（用于后续统计）
+     *       4. EMERGENCY_STOP 等高优先级指令绝不进队列
+     */
+    void handleAgvCommand(const lsk_muduo::TcpConnectionPtr& conn,
+                          const proto::AgvCommand& cmd);
+
+    /**
+     * @brief 处理延迟探测响应（MSG_LATENCY_PROBE）【迭代三第6周新增】
+     * @note IO 线程处理
+     * @note 逻辑：收到 Pong（is_response=true）后交给 LatencyMonitor 计算 RTT
+     */
+    void handleLatencyProbe(const lsk_muduo::TcpConnectionPtr& conn,
+                            const proto::LatencyProbe& probe);
+
     // ==================== 会话管理（SessionManager）====================
     
     /**
@@ -173,6 +212,13 @@ private:
      */
     void onWatchdogTimer();
 
+    /**
+     * @brief 延迟探测定时器回调【迭代三第6周新增】
+     * @note 每 N 秒对所有在线连接发送 LatencyProbe Ping
+     * @note 并输出当前 RTT 统计日志
+     */
+    void onLatencyTimer();
+
     // ==================== 基础业务引擎 ====================
     
     /**
@@ -199,8 +245,7 @@ private:
 
     /**
      * @brief 下发充电指令
-     * @note 简化实现：发送 AgvCommand（类型 EMERGENCY_STOP）
-     * @note 迭代三完善：发送 NavigationTask（目标 "CHARGER"）
+     * @note 发送 AgvCommand（CMD_NAVIGATE_TO）指示车辆导航到充电桩
      */
     void sendChargeCommand(const std::string& agv_id,
                           const lsk_muduo::TcpConnectionPtr& conn);
@@ -243,6 +288,12 @@ private:
     
     /// Worker 线程池（迭代三新增，处理耗时业务）
     std::unique_ptr<ThreadPool> worker_pool_;
+
+    /// 延迟监控器（迭代三第6周新增）
+    LatencyMonitor latency_monitor_;
+
+    /// 延迟探测间隔（秒），默认 5.0
+    double latency_probe_interval_sec_ = 5.0;
 
     // ====================  常量配置 ====================
     

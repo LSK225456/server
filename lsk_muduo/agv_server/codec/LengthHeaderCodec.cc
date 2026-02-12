@@ -11,8 +11,8 @@ bool LengthHeaderCodec::encode(lsk_muduo::Buffer* buf,
                                const std::string& protoData,
                                uint16_t flags)
 {
-    if (!buf || protoData.empty()) {
-        LOG_ERROR << "LengthHeaderCodec::encode - Invalid parameters";
+    if (!buf) {
+        LOG_ERROR << "LengthHeaderCodec::encode - Invalid buffer pointer";
         return false;
     }
 

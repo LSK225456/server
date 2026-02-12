@@ -3,6 +3,7 @@
 
 #include "../../muduo/base/Timestamp.h"
 #include "../../muduo/net/TcpConnection.h"
+#include "../../muduo/base/SpinLock.h"
 #include <string>
 #include <memory>
 #include <mutex>
@@ -101,10 +102,11 @@ public:
 
     /**
      * @brief 获取位姿信息
-     * @note 预留接口，迭代二完善
+     * @note 使用SpinLock保护（迭代三：Day 5-7 快慢分离优化）
+     * @note 高频访问场景（IO线程50Hz更新，Worker线程偶尔读取）
      */
     Pose getPose() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        lsk_muduo::SpinLockGuard lock(pose_mutex_);
         return pose_;
     }
 
@@ -122,6 +124,7 @@ public:
     std::shared_ptr<lsk_muduo::TcpConnection> getConnection() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return conn_.lock();  // 将 weak_ptr 提升为 shared_ptr
+        // 尝试升级：如果连接还活着，返回 shared_ptr；否则返回 nullptr
     }
 
     // ==================== 线程安全的 Setters ====================
@@ -152,10 +155,11 @@ public:
      * @param y Y 坐标（米）
      * @param theta 航向角（度）
      * @param confidence 定位置信度 [0.0, 1.0]
-     * @note IO 线程调用
+     * @note IO 线程调用（50Hz高频）
+     * @note 使用SpinLock保护（迭代三：Day 5-7 快慢分离优化）
      */
     void updatePose(double x, double y, double theta, double confidence) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        lsk_muduo::SpinLockGuard lock(pose_mutex_);
         pose_.x = x;
         pose_.y = y;
         pose_.theta = theta;
@@ -193,12 +197,15 @@ private:
 
     // ==================== 可变字段（需加锁保护）====================
     
-    mutable std::mutex mutex_;                              ///< 互斥锁，保护以下字段
+    mutable std::mutex mutex_;                              ///< 互斥锁，保护通用字段
     std::weak_ptr<lsk_muduo::TcpConnection> conn_;          ///< 连接弱引用（符合文档要求）
     lsk_muduo::Timestamp  last_active_time_;                ///< 最后活跃时间（看门狗用）
     double battery_level_;                                  ///< 电池电量 [0.0, 100.0]
     State state_;                                           ///< 当前状态
-    Pose pose_;                                             ///< 位姿信息（预留）
+    
+    /// 位姿字段独立保护（迭代三：Day 5-7 快慢分离优化）
+    mutable lsk_muduo::SpinLock pose_mutex_;                ///< 自旋锁，保护位姿字段
+    Pose pose_;                                             ///< 位姿信息（高频访问）
 };
 
 /// 会话智能指针类型

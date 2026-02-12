@@ -126,18 +126,19 @@ void AddDescriptorsImpl() {
       "on\030\001 \001(\0132\020.agv.proto.Point\022\021\n\ttimestamp\030"
       "\002 \001(\003*c\n\nTaskStatus\022\r\n\tTASK_IDLE\020\000\022\020\n\014TA"
       "SK_RUNNING\020\001\022\022\n\016TASK_COMPLETED\020\002\022\017\n\013TASK"
-      "_FAILED\020\003\022\017\n\013TASK_PAUSED\020\004*T\n\013CommandTyp"
+      "_FAILED\020\003\022\017\n\013TASK_PAUSED\020\004*i\n\013CommandTyp"
       "e\022\026\n\022CMD_EMERGENCY_STOP\020\000\022\016\n\nCMD_RESUME\020"
-      "\001\022\r\n\tCMD_PAUSE\020\002\022\016\n\nCMD_REBOOT\020\003*B\n\rOper"
-      "ationType\022\020\n\014OP_MOVE_ONLY\020\000\022\016\n\nOP_PICK_U"
-      "P\020\001\022\017\n\013OP_PUT_DOWN\020\002*\232\001\n\nStatusCode\022\r\n\tS"
-      "TATUS_OK\020\000\022\032\n\026STATUS_INVALID_REQUEST\020\001\022\031"
-      "\n\025STATUS_INTERNAL_ERROR\020\002\022\022\n\016STATUS_TIME"
-      "OUT\020\003\022\027\n\023STATUS_VEHICLE_BUSY\020\004\022\031\n\025STATUS"
-      "_TASK_NOT_FOUND\020\005b\006proto3"
+      "\001\022\r\n\tCMD_PAUSE\020\002\022\016\n\nCMD_REBOOT\020\003\022\023\n\017CMD_"
+      "NAVIGATE_TO\020\004*B\n\rOperationType\022\020\n\014OP_MOV"
+      "E_ONLY\020\000\022\016\n\nOP_PICK_UP\020\001\022\017\n\013OP_PUT_DOWN\020"
+      "\002*\232\001\n\nStatusCode\022\r\n\tSTATUS_OK\020\000\022\032\n\026STATU"
+      "S_INVALID_REQUEST\020\001\022\031\n\025STATUS_INTERNAL_E"
+      "RROR\020\002\022\022\n\016STATUS_TIMEOUT\020\003\022\027\n\023STATUS_VEH"
+      "ICLE_BUSY\020\004\022\031\n\025STATUS_TASK_NOT_FOUND\020\005b\006"
+      "proto3"
   };
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
-      descriptor, 545);
+      descriptor, 566);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "common.proto", &protobuf_RegisterTypes);
 }
@@ -182,6 +183,7 @@ bool CommandType_IsValid(int value) {
     case 1:
     case 2:
     case 3:
+    case 4:
       return true;
     default:
       return false;

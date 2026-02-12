@@ -149,6 +149,15 @@ void MockAgvClient::handleProtobufMessage(uint16_t msg_type,
             handleNavigationTask(task);
             break;
         }
+        case MSG_LATENCY_PROBE: {  // 【迭代三第6周新增】
+            LatencyProbe probe;
+            if (!probe.ParseFromArray(payload, static_cast<int>(len))) {
+                LOG_ERROR << "[MockAGV-" << agv_id_ << "] Failed to parse LatencyProbe";
+                return;
+            }
+            handleLatencyProbe(probe);
+            break;
+        }
         default:
             LOG_WARN << "[MockAGV-" << agv_id_ << "] Unknown message type: 0x" 
                      << std::hex << msg_type << std::dec;
@@ -184,19 +193,22 @@ void MockAgvClient::handleAgvCommand(const AgvCommand& cmd) {
             LOG_WARN << "[MockAGV-" << agv_id_ << "] Receiving REBOOT command (ignored)";
             break;
             
+        case CMD_NAVIGATE_TO:
+            LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving NAVIGATE_TO command";
+            if (battery_ < 20.0) {
+                // 低电量时收到 NAVIGATE_TO，解释为充电指令
+                LOG_INFO << "[MockAGV-" << agv_id_ 
+                         << "] Low battery detected, interpreting as charge command";
+                startMovingToCharger();
+            } else {
+                setState(MOVING);
+            }
+            break;
+            
         default:
             LOG_WARN << "[MockAGV-" << agv_id_ << "] Unknown command type: " 
                      << cmd.cmd_type();
             break;
-    }
-    
-    // 简化实现：将任何指令都视为充电触发（迭代一简化逻辑）
-    // 注意：按照 GatewayServer.cc，低电量时发送的是 CMD_EMERGENCY_STOP（简化实现）
-    // 实际应该发送 NavigationTask，这里将 EMERGENCY_STOP 二次利用为充电触发
-    if (cmd.cmd_type() == CMD_EMERGENCY_STOP && battery_ < 20.0) {
-        LOG_INFO << "[MockAGV-" << agv_id_ 
-                 << "] Low battery detected, interpreting as charge command";
-        startMovingToCharger();
     }
 }
 
@@ -406,6 +418,29 @@ void MockAgvClient::sendHeartbeat() {
     sendProtobufMessage(MSG_HEARTBEAT, msg);
     
     LOG_DEBUG << "[MockAGV-" << agv_id_ << "] [SEND] Heartbeat";
+}
+
+// ==================== LatencyProbe 处理【迭代三第6周新增】====================
+
+void MockAgvClient::handleLatencyProbe(const LatencyProbe& probe) {
+    if (!probe.is_response()) {
+        // 收到服务器 Ping，回复 Pong
+        LOG_DEBUG << "[MockAGV-" << agv_id_ << "] [RECV] LatencyProbe Ping, seq="
+                  << probe.seq_num();
+        
+        LatencyProbe pong;
+        pong.set_target_agv_id(agv_id_);
+        pong.set_send_timestamp(probe.send_timestamp());  // 保持原始时间戳
+        pong.set_seq_num(probe.seq_num());                // 保持原始序列号
+        pong.set_is_response(true);
+        
+        sendProtobufMessage(MSG_LATENCY_PROBE, pong);
+        
+        LOG_DEBUG << "[MockAGV-" << agv_id_ << "] [SEND] LatencyProbe Pong, seq="
+                  << probe.seq_num();
+    } else {
+        LOG_DEBUG << "[MockAGV-" << agv_id_ << "] [RECV] Unexpected LatencyProbe Pong";
+    }
 }
 
 // ==================== 工具函数 ====================

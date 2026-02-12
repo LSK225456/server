@@ -74,8 +74,13 @@ void GatewayServer::start() {
     loop_->runEvery(kWatchdogIntervalMs / 1000.0,
                     std::bind(&GatewayServer::onWatchdogTimer, this));
     
+    // 3. 启动延迟探测定时器（迭代三第6周新增）
+    loop_->runEvery(latency_probe_interval_sec_,
+                    std::bind(&GatewayServer::onLatencyTimer, this));
+    
     LOG_INFO << "GatewayServer started (watchdog: " << kWatchdogIntervalMs
-             << "ms, timeout: " << session_timeout_ms_ << "ms)";
+             << "ms, timeout: " << session_timeout_ms_
+             << "ms, latency_probe: " << latency_probe_interval_sec_ << "s)";
 }
 
 // ==================== 消息分发器初始化 ====================
@@ -97,6 +102,18 @@ void GatewayServer::initDispatcher() {
     dispatcher_.registerHandler<proto::NavigationTask>(
         proto::MSG_NAVIGATION_TASK,
         std::bind(&GatewayServer::handleNavigationTask, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    
+    // 【迭代三第6周新增】注册系统指令处理器（IO线程透传）
+    dispatcher_.registerHandler<proto::AgvCommand>(
+        proto::MSG_AGV_COMMAND,
+        std::bind(&GatewayServer::handleAgvCommand, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    
+    // 【迭代三第6周新增】注册延迟探测处理器
+    dispatcher_.registerHandler<proto::LatencyProbe>(
+        proto::MSG_LATENCY_PROBE,
+        std::bind(&GatewayServer::handleLatencyProbe, this,
                   std::placeholders::_1, std::placeholders::_2));
     
     // 设置默认回调（处理未注册的消息类型）
@@ -248,6 +265,32 @@ void GatewayServer::onWatchdogTimer() {
     });
 }
 
+// ==================== 延迟探测定时器【迭代三第6周新增】====================
+
+void GatewayServer::onLatencyTimer() {
+    sessionManager_.forEach([this](const std::string& agv_id,
+                                   const AgvSessionPtr& session) {
+        if (session->getState() != AgvSession::ONLINE) {
+            return;  // 只探测在线的车辆
+        }
+        
+        auto conn = session->getConnection();
+        if (!conn) {
+            return;  // 连接已失效
+        }
+        
+        // 创建并发送 Ping
+        proto::LatencyProbe ping = latency_monitor_.createPing(agv_id);
+        sendProtobufMessage(conn, proto::MSG_LATENCY_PROBE, ping);
+    });
+    
+    // 定期输出 RTT 统计
+    latency_monitor_.logAllStats();
+    
+    // 清理超时的 pending 探测条目（防止客户端不回复 Pong 导致内存泄漏）
+    latency_monitor_.cleanupExpiredProbes();
+}
+
 // ==================== 基础业务引擎实现 ====================
 
 void GatewayServer::checkLowBatteryAndCharge(const AgvSessionPtr& session,
@@ -290,17 +333,99 @@ void GatewayServer::sendProtobufMessage(const TcpConnectionPtr& conn,
 
 void GatewayServer::sendChargeCommand(const std::string& agv_id,
                                       const TcpConnectionPtr& conn) {
+    // 按文档要求：下发 AgvCommand（CMD_NAVIGATE_TO）指示导航到充电桩
     proto::AgvCommand cmd;
     cmd.set_target_agv_id(agv_id);
     cmd.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
-    cmd.set_cmd_type(proto::CMD_EMERGENCY_STOP);  // 简化：暂用 EMERGENCY_STOP
-    
-    // 注意：按原文档，应下发 NavigationTask（目标 "CHARGER"）
-    // 迭代三完善：发送完整的导航任务
+    cmd.set_cmd_type(proto::CMD_NAVIGATE_TO);
     
     sendProtobufMessage(conn, proto::MSG_AGV_COMMAND, cmd);
     
-    LOG_INFO << "[SEND] Charge command to [" << agv_id << "]";
+    LOG_INFO << "[SEND] Charge command (CMD_NAVIGATE_TO) to [" << agv_id << "]";
+}
+
+// ==================== 紧急制动与指令透传【迭代三第6周新增】====================
+
+void GatewayServer::handleAgvCommand(const TcpConnectionPtr& conn,
+                                     const proto::AgvCommand& cmd) {
+    Timestamp receive_time = Timestamp::now();
+    const std::string& target_id = cmd.target_agv_id();
+    
+    LOG_INFO << "[IO THREAD] AgvCommand received: cmd_type="
+             << proto::CommandType_Name(cmd.cmd_type())
+             << ", target=" << target_id
+             << " from " << conn->peerAddress().toIpPort();
+    
+    // 空目标暂不支持广播
+    if (target_id.empty()) {
+        LOG_WARN << "[IO THREAD] AgvCommand with empty target_agv_id, ignoring";
+        return;
+    }
+    
+    // 查找目标会话
+    AgvSessionPtr target_session = findSession(target_id);
+    if (!target_session) {
+        LOG_WARN << "[IO THREAD] Target AGV [" << target_id << "] session not found";
+        // 回复错误
+        proto::CommonResponse resp;
+        resp.set_status(proto::STATUS_INVALID_REQUEST);
+        resp.set_message("Target AGV not found: " + target_id);
+        resp.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+        sendProtobufMessage(conn, proto::MSG_COMMON_RESPONSE, resp);
+        return;
+    }
+    
+    // 获取目标连接
+    auto target_conn = target_session->getConnection();
+    if (!target_conn) {
+        LOG_WARN << "[IO THREAD] Target AGV [" << target_id << "] connection expired";
+        proto::CommonResponse resp;
+        resp.set_status(proto::STATUS_INTERNAL_ERROR);
+        resp.set_message("Target AGV connection lost: " + target_id);
+        resp.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+        sendProtobufMessage(conn, proto::MSG_COMMON_RESPONSE, resp);
+        return;
+    }
+    
+    // IO 线程直接转发（透传，不进 Worker 队列）
+    sendProtobufMessage(target_conn, proto::MSG_AGV_COMMAND, cmd);
+    
+    // 计算处理延迟
+    Timestamp send_time = Timestamp::now();
+    double latency_us = static_cast<double>(
+        send_time.microSecondsSinceEpoch() - receive_time.microSecondsSinceEpoch());
+    double latency_ms = latency_us / 1000.0;
+    
+    LOG_INFO << "[IO THREAD] AgvCommand forwarded to [" << target_id
+             << "] type=" << proto::CommandType_Name(cmd.cmd_type())
+             << " latency=" << latency_ms << "ms";
+    
+    // 回复成功
+    proto::CommonResponse resp;
+    resp.set_status(proto::STATUS_OK);
+    resp.set_message("Command forwarded to " + target_id);
+    resp.set_timestamp(Timestamp::now().microSecondsSinceEpoch());
+    sendProtobufMessage(conn, proto::MSG_COMMON_RESPONSE, resp);
+}
+
+// ==================== 延迟探测处理【迭代三第6周新增】====================
+
+void GatewayServer::handleLatencyProbe(const TcpConnectionPtr& conn,
+                                       const proto::LatencyProbe& probe) {
+    (void)conn;  // Pong 的来源连接（用于日志）
+    
+    if (probe.is_response()) {
+        // 收到客户端的 Pong 回复，计算 RTT
+        double rtt = latency_monitor_.processPong(probe);
+        if (rtt >= 0) {
+            LOG_INFO << "[LatencyMonitor] RTT from [" << probe.target_agv_id()
+                     << "]: " << rtt << "ms (seq=" << probe.seq_num() << ")";
+        }
+    } else {
+        // 不应从客户端收到 Ping（日志告警）
+        LOG_WARN << "[IO THREAD] Unexpected LatencyProbe Ping from "
+                 << conn->peerAddress().toIpPort();
+    }
 }
 
 // ==================== Worker 线程任务处理【迭代三新增】====================
@@ -386,11 +511,11 @@ void GatewayServer::simulateDatabaseWrite(const proto::NavigationTask& msg) {
     LOG_INFO << "  Operation: " << msg.operation();
     LOG_INFO << "  Path Points: " << msg.global_path_size();
     
-    // 模拟数据库写入延迟（50ms = 50000 微秒）
-    // 替代原文档中的"A*路径规划"，改为"存储到 MySQL/InfluxDB"
-    usleep(50000);  // 50ms
+    // 模拟数据库写入延迟（200ms = 200000 微秒）
+    // 替代原文档中的“A*路径规划”，改为“存储到 MySQL/InfluxDB”
+    usleep(200000);  // 200ms
     
-    LOG_INFO << "[WORKER THREAD] Database write completed (simulated 50ms)";
+    LOG_INFO << "[WORKER THREAD] Database write completed (simulated 200ms)";
 }
 
 }  // namespace gateway

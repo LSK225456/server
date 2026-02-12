@@ -27,8 +27,8 @@ public:
     /// 包头固定长度（4 + 2 + 2）
     static constexpr size_t kHeaderLen = 8;
     
-    /// 最小消息长度（包头 + 至少1字节负载）
-    static constexpr size_t kMinMessageLen = kHeaderLen + 1;
+    /// 最小消息长度（仅包头，允许空负载。Protobuf 所有字段为默认值时序列化为空）
+    static constexpr size_t kMinMessageLen = kHeaderLen;
     
     /// 最大消息长度（10MB），防止恶意攻击
     static constexpr size_t kMaxMessageLen = 10 * 1024 * 1024;

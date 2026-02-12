@@ -144,6 +144,12 @@ private:
      */
     void handleNavigationTask(const agv::proto::NavigationTask& task);
 
+    /**
+     * @brief 处理 LatencyProbe【迭代三第6周新增】
+     * @note 收到 Ping（is_response=false）时回复 Pong（is_response=true）
+     */
+    void handleLatencyProbe(const agv::proto::LatencyProbe& probe);
+
     // ==================== 定时任务 ====================
     
     /**

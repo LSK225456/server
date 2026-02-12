@@ -252,10 +252,12 @@ TEST(SessionManagerTest, SessionHoldsWeakConnection) {
     auto session = manager.findSession("AGV-001");
     ASSERT_NE(session, nullptr);
     
-    // 验证可以获取连接
-    auto sessionConn = session->getConnection();
-    ASSERT_NE(sessionConn, nullptr);
-    EXPECT_EQ(sessionConn.get(), conn.get());
+    // 验证可以获取连接（在独立作用域内，确保临时shared_ptr销毁）
+    {
+        auto sessionConn = session->getConnection();
+        ASSERT_NE(sessionConn, nullptr);
+        EXPECT_EQ(sessionConn.get(), conn.get());
+    }  // sessionConn 离开作用域，销毁
     
     // 释放原始连接（模拟连接断开）
     conn.reset();

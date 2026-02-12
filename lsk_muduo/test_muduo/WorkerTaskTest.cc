@@ -18,6 +18,7 @@
 #include "../muduo/net/InetAddress.h"
 #include "../muduo/net/TcpClient.h"
 #include "../muduo/net/Buffer.h"
+#include "../muduo/net/TimerId.h"
 #include "../muduo/base/Logger.h"
 #include <iostream>
 #include <atomic>
@@ -31,7 +32,9 @@ using namespace agv::codec;
 
 // ==================== 测试配置 ====================
 
-constexpr int kServerPort = 9988;
+constexpr int kServerPort1 = 9988;  // Test1使用的端口
+constexpr int kServerPort2 = 9989;  // Test2使用的端口
+constexpr int kServerPort3 = 9990;  // Test3使用的端口
 constexpr const char* kServerAddr = "127.0.0.1";
 constexpr int kWorkerThreads = 4;
 
@@ -200,12 +203,12 @@ void Test1_BasicWorkerTask() {
     EventLoop loop;
     
     // 启动服务器（4个Worker线程）
-    InetAddress server_addr(kServerPort);
+    InetAddress server_addr(kServerPort1);
     GatewayServer server(&loop, server_addr, "TestServer", 5.0, kWorkerThreads);
     server.start();
     
     // 启动客户端
-    TestClient client(&loop, InetAddress(kServerAddr, kServerPort), "AGV-TEST1");
+    TestClient client(&loop, InetAddress(kServerPort1, kServerAddr), "AGV-TEST1");
     client.connect();
     
     // 等待连接建立
@@ -261,15 +264,18 @@ void Test2_IONotBlocked() {
     EventLoop loop;
     
     // 启动服务器
-    InetAddress server_addr(kServerPort);
+    InetAddress server_addr(kServerPort2);
     GatewayServer server(&loop, server_addr, "TestServer", 5.0, kWorkerThreads);
     server.start();
     
     // 启动客户端
-    TestClient client(&loop, InetAddress(kServerAddr, kServerPort), "AGV-TEST2");
+    TestClient client(&loop, InetAddress(kServerPort2, kServerAddr), "AGV-TEST2");
     client.connect();
     
-    loop.runAfter(0.5, [&]() {
+    // 停止标志（shared_ptr包装，避免lambda捕获悬空引用）
+    auto shouldStop = std::make_shared<std::atomic<bool>>(false);
+    
+    loop.runAfter(0.5, [&, shouldStop]() {
         if (!client.isConnected()) {
             LOG_ERROR << "Client not connected!";
             loop.quit();
@@ -277,12 +283,16 @@ void Test2_IONotBlocked() {
         }
         
         // 启动高频 Telemetry（50Hz = 20ms间隔）
-        std::function<void()> sendTelemLoop;
-        sendTelemLoop = [&, &sendTelemLoop]() {
+        // 使用 shared_ptr 包裹 std::function，确保递归调用时对象生命周期安全
+        auto sendTelemLoop = std::make_shared<std::function<void()>>();
+        *sendTelemLoop = [&, shouldStop, sendTelemLoop]() {
+            if (shouldStop->load()) {
+                return;  // 停止递归
+            }
             client.sendTelemetry();
-            loop.runAfter(0.02, sendTelemLoop);  // 20ms = 50Hz
+            loop.runAfter(0.02, *sendTelemLoop);  // 20ms = 50Hz
         };
-        sendTelemLoop();
+        (*sendTelemLoop)();  // 启动循环
         
         // 发送 5 个 NavigationTask（测试 Worker 队列）
         for (int i = 0; i < 5; ++i) {
@@ -291,16 +301,22 @@ void Test2_IONotBlocked() {
             });
         }
         
+        // 2.8秒后停止发送循环
+        loop.runAfter(2.8, [shouldStop]() {
+            shouldStop->store(true);
+            LOG_INFO << "[Test2] Stopping telemetry loop...";
+        });
+        
         // 3秒后检查结果
         loop.runAfter(3.0, [&]() {
             TestStats& stats = client.getStats();
             std::cout << "\n[Test2 Results]\n";
-            std::cout << "  Telemetry sent: " << stats.telemetry_sent << " (expected ~150 @ 50Hz * 3s)\n";
+            std::cout << "  Telemetry sent: " << stats.telemetry_sent << " (expected ~140 @ 50Hz * 2.8s)\n";
             std::cout << "  NavigationTask sent: " << stats.nav_task_sent << "\n";
             std::cout << "  Response received: " << stats.response_received << "\n";
             
-            // 验证 Telemetry 发送频率未受影响
-            if (stats.telemetry_sent >= 140 && stats.response_received >= 5) {
+            // 验证 Telemetry 发送频率未受影响（2.8秒 * 50Hz = 140）
+            if (stats.telemetry_sent >= 130 && stats.response_received >= 5) {
                 std::cout << "  ✅ TEST PASSED: IO thread not blocked\n";
             } else {
                 std::cout << "  ❌ TEST FAILED\n";
@@ -327,12 +343,12 @@ void Test3_ConnectionClosed() {
     EventLoop loop;
     
     // 启动服务器
-    InetAddress server_addr(kServerPort);
+    InetAddress server_addr(kServerPort3);
     GatewayServer server(&loop, server_addr, "TestServer", 5.0, kWorkerThreads);
     server.start();
     
     // 启动客户端
-    TestClient client(&loop, InetAddress(kServerAddr, kServerPort), "AGV-TEST3");
+    TestClient client(&loop, InetAddress(kServerPort3, kServerAddr), "AGV-TEST3");
     client.connect();
     
     loop.runAfter(0.5, [&]() {
@@ -379,13 +395,15 @@ int main(int argc, char* argv[]) {
     try {
         // 测试1：基本功能
         Test1_BasicWorkerTask();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));  // 增加延迟，确保端口释放
         
         // 测试2：并发测试
+        std::cout << "\n[INFO] Starting Test 2...\n";
         Test2_IONotBlocked();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         
         // 测试3：连接断开
+        std::cout << "\n[INFO] Starting Test 3...\n";
         Test3_ConnectionClosed();
         
         std::cout << "\n======================================\n";

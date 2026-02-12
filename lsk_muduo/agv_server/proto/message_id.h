@@ -15,46 +15,46 @@ namespace proto {
  */
 
 // ==================== 上行消息 ID ====================
-constexpr int32_t MSG_AGV_TELEMETRY    = 0x1001;  // AgvTelemetry（高频遥测）
-constexpr int32_t MSG_MPC_TRAJECTORY   = 0x1002;  // MpcTrajectory（预测轨迹）
-constexpr int32_t MSG_TASK_FEEDBACK    = 0x1003;  // TaskFeedback（任务反馈）
+constexpr uint16_t MSG_AGV_TELEMETRY    = 0x1001;  // AgvTelemetry（高频遥测）
+constexpr uint16_t MSG_MPC_TRAJECTORY   = 0x1002;  // MpcTrajectory（预测轨迹）
+constexpr uint16_t MSG_TASK_FEEDBACK    = 0x1003;  // TaskFeedback（任务反馈）
 
 // ==================== 下行消息 ID ====================
-constexpr int32_t MSG_AGV_COMMAND      = 0x2001;  // AgvCommand（系统指令）
-constexpr int32_t MSG_NAVIGATION_TASK  = 0x2002;  // NavigationTask（导航任务）
-constexpr int32_t MSG_LATENCY_PROBE    = 0x2003;  // LatencyProbe（延迟探测）
+constexpr uint16_t MSG_AGV_COMMAND      = 0x2001;  // AgvCommand（系统指令）
+constexpr uint16_t MSG_NAVIGATION_TASK  = 0x2002;  // NavigationTask（导航任务）
+constexpr uint16_t MSG_LATENCY_PROBE    = 0x2003;  // LatencyProbe（延迟探测）
 
 // ==================== 通用消息 ID ====================
-constexpr int32_t MSG_COMMON_RESPONSE  = 0x3001;  // CommonResponse（通用响应）
-constexpr int32_t MSG_HEARTBEAT        = 0x3002;  // Heartbeat（心跳）
+constexpr uint16_t MSG_COMMON_RESPONSE  = 0x3001;  // CommonResponse（通用响应）
+constexpr uint16_t MSG_HEARTBEAT        = 0x3002;  // Heartbeat（心跳）
 
 // ==================== 辅助函数 ====================
 
 /**
  * @brief 判断消息 ID 是否为上行消息
  */
-inline bool isUpstreamMessage(int32_t msg_id) {
+inline bool isUpstreamMessage(uint16_t msg_id) {
     return (msg_id >= 0x1000 && msg_id < 0x2000);
 }
 
 /**
  * @brief 判断消息 ID 是否为下行消息
  */
-inline bool isDownstreamMessage(int32_t msg_id) {
+inline bool isDownstreamMessage(uint16_t msg_id) {
     return (msg_id >= 0x2000 && msg_id < 0x3000);
 }
 
 /**
  * @brief 判断消息 ID 是否为通用消息
  */
-inline bool isCommonMessage(int32_t msg_id) {
+inline bool isCommonMessage(uint16_t msg_id) {
     return (msg_id >= 0x3000 && msg_id < 0x4000);
 }
 
 /**
  * @brief 获取消息类型名称（用于日志）
  */
-inline const char* getMessageTypeName(int32_t msg_id) {
+inline const char* getMessageTypeName(uint16_t msg_id) {
     switch (msg_id) {
         case MSG_AGV_TELEMETRY:   return "AgvTelemetry";
         case MSG_MPC_TRAJECTORY:  return "MpcTrajectory";

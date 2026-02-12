@@ -6,6 +6,7 @@ set(GATEWAY_SRCS
     AgvSession.cc
     SessionManager.cc
     GatewayServer.cc
+    LatencyMonitor.cc
 )
 
 # 创建 Gateway 静态库

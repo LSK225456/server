@@ -94,12 +94,13 @@ enum CommandType {
   CMD_RESUME = 1,
   CMD_PAUSE = 2,
   CMD_REBOOT = 3,
+  CMD_NAVIGATE_TO = 4,
   CommandType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   CommandType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool CommandType_IsValid(int value);
 const CommandType CommandType_MIN = CMD_EMERGENCY_STOP;
-const CommandType CommandType_MAX = CMD_REBOOT;
+const CommandType CommandType_MAX = CMD_NAVIGATE_TO;
 const int CommandType_ARRAYSIZE = CommandType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* CommandType_descriptor();

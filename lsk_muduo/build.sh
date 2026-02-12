@@ -2,6 +2,7 @@
 
 # build.sh - lsk_muduo一键编译脚本
 # 支持 Release 和 Debug 两种构建模式
+# 自动检测并安装所需依赖
 
 set -e  # 遇到错误立即退出
 
@@ -40,15 +41,14 @@ show_usage() {
     -r, --rebuild       清理后重新编译
     -c, --clean         仅清理编译产物
     -j N                使用N个并行任务编译（默认：CPU核心数）
-    -i, --install       编译后安装到系统
-    --test              编译测试程序
+    --skip-deps         跳过依赖检测与安装
     
 示例:
     $0                  # Release模式编译
     $0 -d               # Debug模式编译
     $0 -r               # 清理后重新编译
     $0 -j 8             # 使用8个并行任务
-    $0 -d --test        # Debug模式编译并构建测试
+    $0 --skip-deps      # 跳过依赖安装直接编译
 
 EOF
 }
@@ -63,8 +63,7 @@ BUILD_DIR="build"
 CLEAN_BUILD=false
 ONLY_CLEAN=false
 JOBS=$(nproc 2>/dev/null || echo 4)  # 默认使用所有CPU核心
-ENABLE_INSTALL=false
-BUILD_TESTS=false
+SKIP_DEPS=false
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -89,12 +88,8 @@ while [[ $# -gt 0 ]]; do
             JOBS="$2"
             shift 2
             ;;
-        -i|--install)
-            ENABLE_INSTALL=true
-            shift
-            ;;
-        --test)
-            BUILD_TESTS=true
+        --skip-deps)
+            SKIP_DEPS=true
             shift
             ;;
         *)
@@ -107,15 +102,90 @@ done
 
 # Banner
 print_info "============================================="
-print_info "  lsk_muduo 网络库编译脚本"
+print_info "  lsk_muduo AGV 网关服务器编译脚本"
 print_info "============================================="
 print_info "构建类型: $BUILD_TYPE"
 print_info "并行任务: $JOBS"
 print_info "构建目录: $BUILD_DIR"
-if [ "$BUILD_TESTS" = true ]; then
-    print_info "测试程序: 启用"
-fi
 print_info "============================================="
+
+# ==================== 依赖检测与安装 ====================
+
+check_and_install_deps() {
+    print_info "检测系统依赖..."
+    
+    local MISSING_PKGS=()
+    
+    # 检查 g++
+    if ! command -v g++ &>/dev/null; then
+        MISSING_PKGS+=(build-essential)
+        print_warning "未检测到 g++，将安装 build-essential"
+    else
+        local GCC_VERSION=$(g++ -dumpversion | cut -d. -f1)
+        if [[ "$GCC_VERSION" -lt 9 ]]; then
+            print_warning "g++ 版本 $(g++ -dumpversion) 过低，建议 >= 9（C++17 支持）"
+        else
+            print_info "  ✓ g++ $(g++ -dumpversion)"
+        fi
+    fi
+    
+    # 检查 cmake
+    if ! command -v cmake &>/dev/null; then
+        MISSING_PKGS+=(cmake)
+        print_warning "未检测到 cmake"
+    else
+        print_info "  ✓ cmake $(cmake --version | head -1 | awk '{print $3}')"
+    fi
+    
+    # 检查 make
+    if ! command -v make &>/dev/null; then
+        MISSING_PKGS+=(make)
+        print_warning "未检测到 make"
+    else
+        print_info "  ✓ make $(make --version | head -1 | awk '{print $3}')"
+    fi
+    
+    # 检查 protobuf
+    if ! pkg-config --exists protobuf 2>/dev/null && ! dpkg -s libprotobuf-dev &>/dev/null 2>&1; then
+        MISSING_PKGS+=(libprotobuf-dev protobuf-compiler)
+        print_warning "未检测到 protobuf 开发库"
+    else
+        local PROTO_VER=$(protoc --version 2>/dev/null | awk '{print $2}' || echo "unknown")
+        print_info "  ✓ protobuf $PROTO_VER"
+    fi
+    
+    # 安装缺失的依赖
+    if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
+        print_info "安装缺失依赖: ${MISSING_PKGS[*]}"
+        if command -v apt-get &>/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "${MISSING_PKGS[@]}"
+            print_success "依赖安装完成"
+        elif command -v yum &>/dev/null; then
+            # CentOS/RHEL 包名映射
+            local YUM_PKGS=()
+            for pkg in "${MISSING_PKGS[@]}"; do
+                case "$pkg" in
+                    build-essential) YUM_PKGS+=(gcc-c++ make) ;;
+                    libprotobuf-dev) YUM_PKGS+=(protobuf-devel) ;;
+                    protobuf-compiler) YUM_PKGS+=(protobuf-compiler) ;;
+                    *) YUM_PKGS+=("$pkg") ;;
+                esac
+            done
+            sudo yum install -y "${YUM_PKGS[@]}"
+            print_success "依赖安装完成"
+        else
+            print_error "无法自动安装依赖，请手动安装: ${MISSING_PKGS[*]}"
+            exit 1
+        fi
+    else
+        print_success "所有依赖已就绪"
+    fi
+}
+
+if [[ "$SKIP_DEPS" = false && "$ONLY_CLEAN" = false ]]; then
+    check_and_install_deps
+fi
 
 # 清理函数
 do_clean() {
@@ -175,10 +245,6 @@ CMAKE_ARGS=(
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 )
 
-if [ "$BUILD_TESTS" = true ]; then
-    CMAKE_ARGS+=(-DBUILD_TESTS=ON)
-fi
-
 cmake "${CMAKE_ARGS[@]}" .. || {
     print_error "CMake配置失败"
     exit 1
@@ -199,36 +265,37 @@ print_success "============================================="
 print_success "编译成功！"
 print_success "============================================="
 
-if [ -f "lib/liblsk_muduo.so" ]; then
-    LIB_SIZE=$(du -h lib/liblsk_muduo.so | cut -f1)
-    print_info "生成库文件: lib/liblsk_muduo.so ($LIB_SIZE)"
-    print_info "库文件详情:"
-    ls -lh lib/liblsk_muduo.so* 2>/dev/null || true
-else
-    print_warning "未找到生成的库文件"
+# 列出生成的可执行文件
+if [ -d "bin" ] && [ "$(ls -A bin/ 2>/dev/null)" ]; then
+    print_info "生成的可执行文件:"
+    for f in bin/*; do
+        if [ -x "$f" ] && [ -f "$f" ]; then
+            local_size=$(du -h "$f" | cut -f1)
+            echo -e "  ${GREEN}✓${NC} $f ($local_size)"
+        fi
+    done
 fi
 
-# 安装（如果指定）
-if [ "$ENABLE_INSTALL" = true ]; then
-    print_info "安装到系统..."
-    cd "$BUILD_DIR"
-    sudo make install || {
-        print_error "安装失败"
-        exit 1
-    }
-    cd "$SCRIPT_DIR"
-    print_success "安装完成"
+# 列出生成的库文件
+if [ -d "lib" ] && [ "$(ls -A lib/ 2>/dev/null)" ]; then
+    print_info "生成的库文件:"
+    for f in $(find lib/ -maxdepth 1 \( -name '*.a' -o -name '*.so*' \) 2>/dev/null); do
+        if [ -f "$f" ]; then
+            local_size=$(du -h "$f" | cut -f1)
+            echo -e "  ${GREEN}✓${NC} $f ($local_size)"
+        fi
+    done
 fi
 
 print_success "============================================="
 print_success "构建流程完成！"
 print_success "============================================="
-print_info "使用说明:"
-print_info "  1. 库文件位于: lib/liblsk_muduo.so"
-print_info "  2. 链接时使用: -L./lib -llsk_muduo -lpthread -lrt"
-print_info "  3. 包含头文件: -I./muduo"
 print_info ""
-print_info "下次编译可使用:"
+print_info "快速启动:"
+print_info "  ./bin/gateway_main --port 9090        # 启动服务器"
+print_info "  ./bin/test_lsk_server                 # 运行综合测试"
+print_info ""
+print_info "下次编译:"
 print_info "  ./build.sh           # 增量编译"
 print_info "  ./build.sh -r        # 完全重新编译"
 print_info "  ./build.sh -d        # Debug模式编译"
