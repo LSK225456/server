@@ -29,9 +29,9 @@ size_t convert(char buf[], T value) {
 
 template<typename T>
 void LogStream::formatInteger(T v) {
-    if (buffer_.avail() >= kMaxNumericSize) {
-        size_t len = convert(buffer_.current(), v);
-        buffer_.add(len);
+    if (buffer_.avail() >= kMaxNumericSize) {       // 检查空间（48字节）
+        size_t len = convert(buffer_.current(), v);// 直接写入buffer
+        buffer_.add(len);// 移动cur_指针
     }
 }
 

@@ -6,8 +6,8 @@
 
 namespace lsk_muduo {
 
-const int kSmallBuffer = 4000;
-const int kLargeBuffer = 4000 * 1000;
+const int kSmallBuffer = 4000;      // LogStream用（单条日志）
+const int kLargeBuffer = 4000 * 1000;       // AsyncLogging用（4MB批量）
 
 template<int SIZE>
 class FixedBuffer : noncopyable {
@@ -15,28 +15,29 @@ public:
     FixedBuffer() : cur_(data_) {}
 
     void append(const char* buf, size_t len) {
-        if (static_cast<size_t>(avail()) > len) {
-            memcpy(cur_, buf, len);
-            cur_ += len;
+        if (static_cast<size_t>(avail()) > len) {   // 检查剩余空间
+            memcpy(cur_, buf, len);                 // 内存拷贝
+            cur_ += len;                            // 移动指针
         }
+        // 注意：如果空间不够，什么都不做（日志不能阻塞业务）
     }
 
-    const char* data() const { return data_; }
+    const char* data() const { return data_; }      // 获取已写入的数据
     int length() const { return static_cast<int>(cur_ - data_); }
 
     char* current() { return cur_; }
     int avail() const { return static_cast<int>(end() - cur_); }
     void add(size_t len) { cur_ += len; }
 
-    void reset() { cur_ = data_; }
+    void reset() { cur_ = data_; }      // 重置（清空）
     void bzero() { memset(data_, 0, sizeof(data_)); }
 
     std::string toString() const { return std::string(data_, length()); }
 
 private:
     const char* end() const { return data_ + sizeof(data_); }
-    char data_[SIZE];
-    char* cur_;
+    char data_[SIZE];       // 栈上或对象内固定大小数组
+    char* cur_;                 // 当前写入位置
 };
 
 class LogStream : noncopyable {

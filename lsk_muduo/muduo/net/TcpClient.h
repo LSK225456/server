@@ -57,15 +57,15 @@ private:
     void removeConnection(const TcpConnectionPtr& conn);
 
     EventLoop* loop_;
-    ConnectorPtr connector_;
+    ConnectorPtr connector_;        // 2. Connector（负责连接）
     const std::string name_;
-    ConnectionCallback connectionCallback_;
+    ConnectionCallback connectionCallback_;     // 4. 用户回调
     MessageCallback messageCallback_;
     WriteCompleteCallback writeCompleteCallback_;
     std::atomic_bool retry_;    // 是否重连
     std::atomic_bool connect_;  // 是否连接
     int nextConnId_;            // 连接 ID
-    mutable std::mutex mutex_;
+    mutable std::mutex mutex_;      // 8. 保护 connection_
     TcpConnectionPtr connection_;  // 当前连接
 };
 

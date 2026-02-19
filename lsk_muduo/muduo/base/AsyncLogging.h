@@ -31,9 +31,9 @@ private:
     using BufferPtr = std::unique_ptr<Buffer>;
     using BufferVector = std::vector<BufferPtr>;
 
-    const int flushInterval_;
+    const int flushInterval_;       // 刷盘周期(默认3秒)
     std::atomic<bool> running_;
-    const std::string basename_;
+    const std::string basename_;        // 日志文件基础名
     const off_t rollSize_;
     std::thread thread_;
     
