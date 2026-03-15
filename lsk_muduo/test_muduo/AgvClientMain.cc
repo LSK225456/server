@@ -45,9 +45,9 @@ struct ClientConfig {
     std::string agv_id = "AGV-DEFAULT";
     std::string server_ip = "127.0.0.1";
     uint16_t server_port = 8000;
-    double telemetry_freq = 50.0;
+    double telemetry_freq = 10.0;  // 优化：从50Hz→10Hz减轻服务器压力
     double initial_battery = 100.0;
-    double watchdog_timeout = 5.0;
+    double watchdog_timeout = 8.0;  // 优化：从5s→8s增加容错
 };
 
 // ==================== 参数解析函数 ====================
@@ -57,9 +57,9 @@ void printUsage(const char* program_name) {
               << "\nOptions:\n"
               << "  --id <string>      AGV ID (default: AGV-DEFAULT)\n"
               << "  --server <ip:port> Server address (default: 127.0.0.1:8000)\n"
-              << "  --freq <Hz>        Telemetry frequency (default: 50.0)\n"
+              << "  --freq <Hz>        Telemetry frequency (default: 10.0, optimized from 50.0)\n"
               << "  --battery <0-100>  Initial battery level (default: 100.0)\n"
-              << "  --timeout <sec>    Watchdog timeout (default: 5.0)\n"
+              << "  --timeout <sec>    Watchdog timeout (default: 8.0, optimized from 5.0)\n"
               << "  --help, -h         Show this help message\n"
               << "\nExamples:\n"
               << "  " << program_name << "\n"
@@ -166,6 +166,10 @@ int main(int argc, char* argv[]) {
     std::cout << "  Initial Battery:   " << config.initial_battery << " %" << std::endl;
     std::cout << "  Watchdog Timeout:  " << config.watchdog_timeout << " s" << std::endl;
     std::cout << "========================================\n" << std::endl;
+    
+    // 设置muduo日志级别为WARN，过滤底层INFO日志
+    lsk_muduo::Logger::setLogLevel(lsk_muduo::Logger::WARN);
+    // 注：服务器断开连接时可能会有ERROR日志（SO_ERROR:0），这是正常现象
     
     try {
         // 创建事件循环

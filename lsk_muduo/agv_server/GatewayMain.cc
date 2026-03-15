@@ -144,6 +144,10 @@ int main(int argc, char* argv[]) {
               << (config.num_threads == 0 ? " (Single-Reactor)" : "") << std::endl;
     std::cout << "========================================\n" << std::endl;
     
+    // 设置muduo日志级别为WARN，过滤底层INFO日志
+    lsk_muduo::Logger::setLogLevel(lsk_muduo::Logger::WARN);
+    // 注：客户端断开连接时可能会有ERROR日志（SO_ERROR:0），这是正常现象
+    
     try {
         // 设置信号处理
         signal(SIGINT, signalHandler);

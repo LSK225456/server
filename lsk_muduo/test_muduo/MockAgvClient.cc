@@ -34,23 +34,23 @@ MockAgvClient::MockAgvClient(EventLoop* loop,
         std::bind(&MockAgvClient::onMessage, this,
                   std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] Created (freq=" << telemetry_freq 
-             << "Hz, watchdog_timeout=" << watchdog_timeout << "s)";
+    // LOG_INFO << "[MockAGV-" << agv_id_ << "] Created (freq=" << telemetry_freq
+    //          << "Hz, watchdog_timeout=" << watchdog_timeout << "s)";
 }
 
 MockAgvClient::~MockAgvClient() {
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] Destroyed";
+    // LOG_INFO << "[MockAGV-" << agv_id_ << "] Destroyed";
 }
 
 // ==================== 连接管理 ====================
 
 void MockAgvClient::connect() {
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] Connecting to server...";
+    // LOG_INFO << "[MockAGV-" << agv_id_ << "] Connecting to server...";
     client_.connect();
 }
 
 void MockAgvClient::disconnect() {
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] Disconnecting...";
+    // LOG_INFO << "[MockAGV-" << agv_id_ << "] Disconnecting...";
     client_.disconnect();
 }
 
@@ -60,7 +60,7 @@ void MockAgvClient::onConnection(const TcpConnectionPtr& conn) {
     if (conn->connected()) {
         connected_ = true;
         conn_ = conn;
-        LOG_INFO << "[MockAGV-" << agv_id_ << "] ✓ Connected to server: "
+        LOG_WARN << "[✅ CONNECTED] AGV [" << agv_id_ << "] -> "
                  << conn->peerAddress().toIpPort();
         
         // 刷新服务器消息时间戳（连接成功视为收到消息）
@@ -76,16 +76,16 @@ void MockAgvClient::onConnection(const TcpConnectionPtr& conn) {
         loop_->runEvery(kWatchdogCheckIntervalSec, 
                         std::bind(&MockAgvClient::onWatchdogTimer, this));
         
-        LOG_INFO << "[MockAGV-" << agv_id_ << "] Timers started";
+        // LOG_INFO << "[MockAGV-" << agv_id_ << "] Timers started";
         
     } else {
         connected_ = false;
-        LOG_WARN << "[MockAGV-" << agv_id_ << "] ✗ Disconnected from server";
+        LOG_WARN << "[❌ DISCONNECTED] AGV [" << agv_id_ << "]";
         
         // 触发紧急停止（连接断开）
         if (state_ != E_STOP) {
             setState(E_STOP);
-            LOG_ERROR << "[EMERGENCY] Server connection lost!";
+            LOG_ERROR << "[⚠️  EMERGENCY] AGV [" << agv_id_ << "] Server Lost!";
         }
     }
 }
@@ -166,39 +166,39 @@ void MockAgvClient::handleProtobufMessage(uint16_t msg_type,
 }
 
 void MockAgvClient::handleAgvCommand(const AgvCommand& cmd) {
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] [RECV] AgvCommand: cmd_type=" 
-             << cmd.cmd_type() << " (" << CommandType_Name(cmd.cmd_type()) << ")";
+    // LOG_INFO << "[MockAGV-" << agv_id_ << "] [RECV] AgvCommand: cmd_type="
+    //          << cmd.cmd_type() << " (" << CommandType_Name(cmd.cmd_type()) << ")";
     
     switch (cmd.cmd_type()) {
         case CMD_EMERGENCY_STOP:
-            LOG_WARN << "[MockAGV-" << agv_id_ << "] Receiving EMERGENCY_STOP command";
+            LOG_WARN << "[⚠️  E-STOP] AGV [" << agv_id_ << "] received EMERGENCY_STOP";
             setState(E_STOP);
             break;
             
         case CMD_RESUME:
-            LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving RESUME command";
+            // LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving RESUME command";
             if (state_ == E_STOP || state_ == CHARGING) {
                 setState(IDLE);
             }
             break;
             
         case CMD_PAUSE:
-            LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving PAUSE command";
+            // LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving PAUSE command";
             if (state_ == MOVING || state_ == MOVING_TO_CHARGER) {
                 setState(IDLE);
             }
             break;
             
         case CMD_REBOOT:
-            LOG_WARN << "[MockAGV-" << agv_id_ << "] Receiving REBOOT command (ignored)";
+            // LOG_WARN << "[MockAGV-" << agv_id_ << "] Receiving REBOOT command (ignored)";
             break;
             
         case CMD_NAVIGATE_TO:
-            LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving NAVIGATE_TO command";
+            // LOG_INFO << "[MockAGV-" << agv_id_ << "] Receiving NAVIGATE_TO command";
             if (battery_ < 20.0) {
                 // 低电量时收到 NAVIGATE_TO，解释为充电指令
-                LOG_INFO << "[MockAGV-" << agv_id_ 
-                         << "] Low battery detected, interpreting as charge command";
+                LOG_WARN << "[🔋 CHARGING] AGV [" << agv_id_ 
+                         << "] battery=" << battery_ << "%, interpreting as charge command";
                 startMovingToCharger();
             } else {
                 setState(MOVING);
@@ -219,10 +219,10 @@ void MockAgvClient::handleHeartbeat(const Heartbeat& msg) {
 }
 
 void MockAgvClient::handleNavigationTask(const NavigationTask& task) {
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] [RECV] NavigationTask: task_id=" << task.task_id();
-    LOG_INFO << "  Target: (" << task.target_node().x() << ", " << task.target_node().y() << ")";
-    LOG_INFO << "  Operation: " << OperationType_Name(task.operation());
-    LOG_INFO << "  Path points: " << task.global_path_size();
+    // LOG_INFO << "[MockAGV-" << agv_id_ << "] [RECV] NavigationTask: task_id=" << task.task_id();
+    // LOG_INFO << "  Target: (" << task.target_node().x() << ", " << task.target_node().y() << ")";
+    // LOG_INFO << "  Operation: " << OperationType_Name(task.operation());
+    // LOG_INFO << "  Path points: " << task.global_path_size();
     
     // 模拟执行导航任务：
     // 1. 切换到 MOVING 状态
@@ -232,7 +232,7 @@ void MockAgvClient::handleNavigationTask(const NavigationTask& task) {
     // 延迟任务：3秒后恢复到 IDLE
     loop_->runAfter(3.0, [this, task_id = task.task_id()]() {
         if (state_ == MOVING) {
-            LOG_INFO << "[MockAGV-" << agv_id_ << "] NavigationTask completed: task_id=" << task_id;
+            // LOG_INFO << "[MockAGV-" << agv_id_ << "] NavigationTask completed: task_id=" << task_id;
             setState(IDLE);
             
             // 可选：发送 TaskFeedback（迭代三后续完善）
@@ -301,10 +301,8 @@ void MockAgvClient::onWatchdogTimer() {
                          last_server_msg_time_.microSecondsSinceEpoch()) / 1000000.0;
     
     if (elapsed_sec > watchdog_timeout_sec_ && state_ != E_STOP) {
-        LOG_ERROR << "[WATCHDOG] [MockAGV-" << agv_id_ 
-                  << "] ⚠️ [EMERGENCY] Server Lost! "
-                  << "(timeout=" << elapsed_sec << "s > " 
-                  << watchdog_timeout_sec_ << "s)";
+        LOG_ERROR << "[⚠️  WATCHDOG] AGV [" << agv_id_ 
+                  << "] Server timeout (" << elapsed_sec << "s)";
         setState(E_STOP);
     }
 }
@@ -317,8 +315,8 @@ void MockAgvClient::setState(State new_state) {
     State old_state = state_;
     state_ = new_state;
     
-    LOG_INFO << "[MockAGV-" << agv_id_ << "] State: " 
-             << stateToString(old_state) << " -> " << stateToString(new_state);
+    LOG_WARN << "[🚗 STATE] AGV [" << agv_id_ << "] " 
+             << stateToString(old_state) << " → " << stateToString(new_state);
 }
 
 void MockAgvClient::updateBattery(double delta) {
@@ -331,9 +329,13 @@ void MockAgvClient::updateBattery(double delta) {
     
     battery_ = new_battery;
     
-    LOG_DEBUG << "[MockAGV-" << agv_id_ << "] Battery: " 
-              << old_battery << "% -> " << new_battery << "% (delta=" 
-              << delta << "%/s)";
+    // 只在电量显著变化时输出（每5%）
+    int old_level = static_cast<int>(old_battery / 5.0);
+    int new_level = static_cast<int>(new_battery / 5.0);
+    if (old_level != new_level || new_battery <= 20.0) {
+        LOG_WARN << "[🔋 BATTERY] AGV [" << agv_id_ << "] " 
+                 << old_battery << "% → " << new_battery << "%";
+    }
 }
 
 void MockAgvClient::refreshServerMessageTime() {
@@ -341,22 +343,20 @@ void MockAgvClient::refreshServerMessageTime() {
 }
 
 void MockAgvClient::onChargingComplete() {
-    LOG_INFO << "[MockAGV-" << agv_id_ 
-             << "] ⚡ Charging complete (battery=" << battery_ 
-             << "%), waiting for RESUME command...";
+    LOG_WARN << "[⚡ CHARGED] AGV [" << agv_id_ 
+             << "] battery=" << battery_ << "%, waiting for RESUME...";
     // 保持 CHARGING 状态，等待服务器发送 RESUME 指令
 }
 
 void MockAgvClient::startMovingToCharger() {
-    LOG_INFO << "[MockAGV-" << agv_id_ 
-             << "] 🚗 Moving to charger (ETA: " 
-             << kMovingToChargerDelaySec << "s)...";
+    LOG_WARN << "[🚗 TO CHARGER] AGV [" << agv_id_ 
+             << "] ETA=" << kMovingToChargerDelaySec << "s";
     setState(MOVING_TO_CHARGER);
     
     // 模拟移动延迟（3秒后到达充电点）
     loop_->runAfter(kMovingToChargerDelaySec, [this]() {
         if (state_ == MOVING_TO_CHARGER) {
-            LOG_INFO << "[MockAGV-" << agv_id_ << "] ⚡ Arrived at charger, start charging";
+            LOG_WARN << "[⚡ ARRIVED] AGV [" << agv_id_ << "] at charger, start charging";
             setState(CHARGING);
         }
     });

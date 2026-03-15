@@ -1,400 +1,845 @@
-# lsk_muduo — 仓库分拣无人叉车自主导航网关服务器
+# lsk_muduo
 
-## 项目简介
+## 1. 项目简介
 
-基于自研 lsk_muduo 网络库（muduo 精简分支）构建的 **AGV（自动导引运输车）网关服务器**，面向"十四五"重点项目——仓库分拣无人叉车自主导航系统。
+`lsk_muduo` 是一个面向仓库分拣无人叉车场景的 AGV 网关服务器项目，核心目标是把“车辆高频上报、服务器状态监管、控制指令回传、会话生命周期管理、业务线程隔离、链路延迟观测”整合成一套可运行、可测试、可扩展的完整通信系统。
 
-服务器采用 **Reactor + Worker 线程池** 架构，支持数百辆 AGV 同时接入。IO 线程以 50Hz 频率处理高频遥测和心跳消息，Worker 线程处理耗时业务（数据库写入、路径规划），两者通过 Task 投递机制解耦，实现快慢分离。
+这个仓库的主体并不是单纯写一个业务服务器，而是同时做了两层工作：
 
-### 核心能力
+1. **在底层补全并扩展 muduo 精简版网络库**，补上 `TimerQueue`、`TcpClient`、`Connector`、`ThreadPool`、`SpinLock`、`WeakCallback`、增强版 `Buffer`、异步日志等关键模块。  
+2. **在上层实现 AGV 网关业务**，完成 Protobuf 协议、长度头编解码、网关服务端、模拟客户端、会话管理、快慢分离、延迟监控和综合测试。
 
-| 能力 | 实现方式 |
-|------|----------|
-| 高频遥测处理 (50Hz) | IO 线程 + SpinLock 位姿更新 |
-| 心跳保活 & 超时检测 | TimerQueue 看门狗（100ms 周期） |
-| 低电量自动充电 | 业务引擎检测 battery < 20% 自动下发充电导航指令 |
-| 多会话管理 | ConcurrentMap (shared_mutex) + SessionManager |
-| 类型安全消息分发 | ProtobufDispatcher 模板化路由 |
-| IO/业务线程分离 | ThreadPool Worker + runInLoop 回调 |
-| 紧急制动透传 | IO 线程直接转发，不进队列，延迟可测量 |
-| RTT 延迟监控 | LatencyMonitor Ping/Pong 机制（默认 5s 周期） |
+从项目定位上看，它不是一个“只会收发 socket 的 demo”，而是一个围绕以下真实工程问题展开的通信系统：
 
-### 技术栈
-
-- **语言**: C++17
-- **网络库**: lsk_muduo（Reactor 模式，epoll LT）
-- **序列化**: Protocol Buffers 3
-- **构建**: CMake 3.10+
-- **测试**: Google Test（FetchContent 自动下载）
-- **并发**: shared_mutex / SpinLock (TTAS) / ThreadPool
+- AGV 持续高频上报遥测数据时，服务器如何稳定接收并更新内存状态。
+- 车辆掉线、服务器失联、消息半包、粘包、重载、低电量等场景如何处理。
+- 高频轻业务和低频重业务如何拆开，避免耗时逻辑阻塞 IO 线程。
+- 紧急制动这类高优先级控制指令如何走最快路径，避免排队。
+- 如何用统一协议和完整测试，把服务端、客户端、网络库三层串成一个闭环。
 
 ---
 
-## 项目结构
+## 2. 核心功能详细介绍
 
-```
-lsk_muduo/
-├── CMakeLists.txt              # 顶层构建入口
-├── build.sh                    # 一键编译脚本（含依赖安装）
-├── agv_server/                 # 服务器核心代码
-│   ├── CMakeLists.txt          # 服务器构建配置
-│   ├── GatewayMain.cc          # 服务器入口（main 函数）
-│   ├── codec/                  # 编解码层
-│   │   ├── LengthHeaderCodec.h
-│   │   └── LengthHeaderCodec.cc
-│   ├── gateway/                # 网关核心层
-│   │   ├── GatewayServer.h / .cc
-│   │   ├── AgvSession.h / .cc
-│   │   ├── SessionManager.h / .cc
-│   │   ├── ConcurrentMap.h
-│   │   ├── ProtobufDispatcher.h
-│   │   ├── WorkerTask.h
-│   │   └── LatencyMonitor.h / .cc
-│   └── proto/                  # 协议定义层
-│       ├── common.proto
-│       ├── message.proto
-│       └── message_id.h
-├── muduo/                      # lsk_muduo 网络库（base + net）
-├── test_muduo/                 # 测试代码
-├── bin/                        # 编译产物（可执行文件）
-├── lib/                        # 编译产物（静态库）
-├── build/                      # CMake 构建目录
-└── logs/                       # 运行日志
-```
+### 2.1 网络与并发架构
 
----
+项目采用 **Reactor + Worker 线程池** 的结构：
 
-## 代码文件详解
+- **IO 线程**负责网络连接、读写事件、解包、消息分发和高频轻量逻辑。
+- **Worker 线程池**负责耗时业务，例如模拟数据库写入。
+- **TimerQueue** 负责心跳检测、看门狗、延迟探测等周期任务。
+- **runInLoop / queueInLoop** 负责跨线程安全回调，把 Worker 处理结果送回 IO 线程发送。
 
-### 顶层文件
+这意味着：
 
-#### `CMakeLists.txt`
-项目顶层 CMake 配置。设置 C++17 标准、编译选项（`-Wall -Wextra -pthread`）、输出目录（`bin/`、`lib/`）。通过 FetchContent 自动下载 Google Test。包含 `muduo/`、`agv_server/`、`test_muduo/` 三个子目录。
+- 高频消息不会因为慢业务被拖住。
+- 网络层和业务层边界清晰。
+- 既可以单 Reactor 运行，也可以通过 `--threads` 扩展为多 IO 线程模式。
 
-#### `build.sh`
-一键编译脚本。支持命令行参数：`-d`（Debug 模式）、`-r`（清理重编）、`-c`（仅清理）、`-j N`（并行任务数）。自动检测并安装所需依赖（cmake、protobuf、build-essential）。首次运行时创建构建目录并执行完整的 cmake + make 流程。
+### 2.2 协议层：8 字节长度头 + Protobuf
 
----
+项目通信协议采用固定 8 字节包头配合 Protobuf 负载，格式如下：
 
-### 编解码层 `agv_server/codec/`
-
-#### `LengthHeaderCodec.h` / `LengthHeaderCodec.cc`
-**8 字节包头 + Protobuf 负载** 的二进制协议编解码器。
-
-协议格式：
-```
+```text
 +----------------+------------------+----------------+----------------------+
-| Length (4字节)  | MsgType (2字节)  | Flags (2字节)  | Protobuf Payload (N) |
+| Length (4字节) | MsgType (2字节)  | Flags (2字节)  | Protobuf Payload (N) |
 +----------------+------------------+----------------+----------------------+
 ```
 
-- `encode()`: 将消息类型 + Protobuf 序列化数据编码为带包头的二进制帧
-- `decode()`: 从 Buffer 中提取完整消息帧，解析包头和负载
-- `hasCompleteMessage()`: 判断 Buffer 中是否包含至少一个完整消息（处理半包）
-- `peekMessageLength()`: 窥视消息总长度（不移动读指针）
+协议层解决了以下问题：
 
-支持粘包（循环解码）、半包（等待数据完整）、超长包防护（最大 10MB）。网络字节序（大端）。
+- **半包处理**：数据没收全时等待，不误解析。
+- **粘包处理**：同一个 buffer 里有多条消息时循环解包。
+- **消息分类**：通过 `MsgType` 精确路由到不同业务处理函数。
+- **安全保护**：超过 10MB 的异常消息直接拒绝。
+- **可扩展性**：`Flags` 预留给压缩、加密、优先级等扩展能力。
 
-#### `CMakeLists.txt`
-编译 `agv_codec` 静态库，链接 lsk_muduo_net。
+### 2.3 消息体系
+
+协议中定义了三大类消息：
+
+1. **上行消息（车辆 -> 服务器）**
+  - `AgvTelemetry`：高频遥测，上报位置、电量、速度、误差码等。
+  - `MpcTrajectory`：预测轨迹，当前预留。
+  - `TaskFeedback`：任务反馈，当前预留。
+
+2. **下行消息（服务器 -> 车辆）**
+  - `AgvCommand`：紧急制动、恢复、暂停、导航。
+  - `NavigationTask`：导航任务与全局路径。
+  - `LatencyProbe`：RTT 探测 Ping/Pong。
+
+3. **通用消息（双向）**
+  - `Heartbeat`：心跳保活。
+  - `CommonResponse`：对控制指令或任务的统一响应。
+
+### 2.4 会话管理与车辆状态管理
+
+每台 AGV 在服务端都有一个 `AgvSession` 对象，里面维护：
+
+- `agv_id`
+- `TcpConnection` 的弱引用
+- 最后活跃时间
+- 电量
+- 当前状态（`ONLINE` / `OFFLINE` / `CHARGING`）
+- 位姿信息（`x / y / theta / confidence`）
+
+这里的设计很工程化：
+
+- **连接用 weak_ptr**，避免业务层把底层连接生命周期“拖住”。
+- **普通字段用 mutex**，保护电量、状态、最后活跃时间。
+- **位姿字段用 SpinLock**，适合 50Hz 高频更新场景，减少系统调用开销。
+
+### 2.5 心跳、看门狗与掉线检测
+
+服务端和客户端都实现了“应用层健康检测”：
+
+- **服务端**每 100ms 检查一次会话是否超时，超过配置值后把车辆标记为 `OFFLINE`。
+- **客户端**每 0.2s 发一次心跳，并在收到任何服务器消息时刷新“最后收到服务端消息时间”。
+- **客户端看门狗**超时后进入 `E_STOP`，用于模拟“服务器失联后的安全制动”。
+
+这一层和 TCP 本身的连接状态不同：
+
+- TCP 还没断，不代表业务一定活着。
+- 所以项目明确使用**应用层心跳 + 会话状态机**来做更快、更符合业务语义的存活判断。
+
+### 2.6 低电量自动充电逻辑
+
+服务端收到 `AgvTelemetry` 后，会立即检查电量：
+
+- 当 `battery < 20.0` 且当前状态不是 `CHARGING` 时，
+- 服务端会立刻下发一个 `AgvCommand`，其类型是 `CMD_NAVIGATE_TO`，
+- 客户端在低电量场景下会把这个导航命令解释为“去充电桩”。
+
+客户端随后会经历这样一个状态流：
+
+```text
+IDLE -> MOVING_TO_CHARGER -> CHARGING
+```
+
+充电完成后客户端不会自动恢复，而是保持 `CHARGING` 状态，等待服务端发送 `RESUME`。
+
+### 2.7 快慢分离：IO 线程与 Worker 线程池分工
+
+项目把消息处理分为两类：
+
+#### 直接在 IO 线程处理的消息
+
+- `AgvTelemetry`
+- `Heartbeat`
+- `AgvCommand`
+- `LatencyProbe` 的 Pong 处理
+
+这些消息的特点是：
+
+- 频率高
+- 逻辑短
+- 必须快
+
+#### 投递到 Worker 线程池处理的消息
+
+- `NavigationTask`
+
+处理流程是：
+
+1. IO 线程收到 `NavigationTask`。
+2. 构造 `WorkerTask`，其中保存连接弱引用、会话强引用、消息对象和时间戳。
+3. 投递到 `ThreadPool`。
+4. Worker 线程模拟 200ms 数据库写入。
+5. 处理完成后通过 `runInLoop` 回到 IO 线程发送 `CommonResponse`。
+
+这样做的核心收益是：
+
+- 慢任务不会卡住遥测和心跳。
+- 任务执行过程如果连接断开，也能靠弱引用安全感知并取消后续发送。
+
+### 2.8 紧急制动透传
+
+`AgvCommand` 中的控制命令走的是“最快路径”。
+
+服务器收到某客户端发来的控制指令后：
+
+1. 直接根据 `target_agv_id` 查找目标会话。
+2. 直接拿到目标连接。
+3. **在 IO 线程内立即透传给目标车辆**。
+4. 给源客户端回一个 `CommonResponse`。
+
+这条链路**不进入 Worker 队列**，原因很明确：
+
+- 紧急制动属于最高优先级控制包。
+- 排队会引入额外不可控延迟。
+
+### 2.9 RTT 延迟监控
+
+服务端内置 `LatencyMonitor`：
+
+- 周期性给所有在线车辆发 `LatencyProbe` Ping。
+- 每个 Ping 带序列号和发送时间戳。
+- 客户端收到后原样回 Pong。
+- 服务端收到 Pong 后计算 RTT，并维护：
+  - 最近 RTT
+  - 平均 RTT
+  - 最小 RTT
+  - 最大 RTT
+  - 样本数
+
+同时，`LatencyMonitor` 会清理长时间未回复的 pending 探测项，避免内存泄漏。
+
+### 2.10 模拟客户端不是“假发包器”，而是状态机客户端
+
+`MockAgvClient` 不只是一个把 protobuf 发出去的小工具，它有自己的简化车辆状态机：
+
+- `IDLE`
+- `MOVING`
+- `E_STOP`
+- `MOVING_TO_CHARGER`
+- `CHARGING`
+
+它还实现了：
+
+- 自动发遥测
+- 自动发心跳
+- 电量按状态变化
+- 掉线急停
+- 收到充电命令后去充电桩
+- 收到 `LatencyProbe` 后自动回复 Pong
+
+所以它既能做功能联调，也能做轻量压测和系统行为验证。
+
+### 2.11 综合测试覆盖面
+
+项目目前主测试入口是 `bin/test_lsk_server`，总计 32 个用例，覆盖：
+
+- Buffer 整数操作
+- Codec 编解码
+- Protobuf 序列化
+- ConcurrentMap 并发读写
+- SpinLock 并发读写
+- ProtobufDispatcher 分发
+- SessionManager 会话 CRUD
+- LatencyMonitor 统计
+- 单客户端遥测
+- 心跳保活
+- 低电量自动充电
+- 多客户端并发
+- 会话超时标记
+- Worker 与 IO 隔离
+- 紧急制动透传
+- RTT 监控
+- 200ms 阻塞注入
+- 断连安全性
+- MockAgvClient 状态机联调
 
 ---
 
-### 协议定义层 `agv_server/proto/`
+## 3. 运行环境与依赖
 
-#### `common.proto`
-公共枚举和基础消息类型定义：
+推荐环境：
 
-| 枚举/消息 | 说明 |
-|-----------|------|
-| `TaskStatus` | 任务状态（IDLE / RUNNING / COMPLETED / FAILED / PAUSED） |
-| `CommandType` | 系统指令类型（EMERGENCY_STOP / RESUME / PAUSE / REBOOT / NAVIGATE_TO） |
-| `OperationType` | 操作类型（MOVE_ONLY / PICK_UP / PUT_DOWN） |
-| `StatusCode` | 响应状态码（OK / INVALID_REQUEST / INTERNAL_ERROR / TIMEOUT 等） |
-| `Point` | 2D 坐标点（x, y），单位米 |
-| `TimedPoint` | 带时间戳的坐标点（用于轨迹预测） |
-
-#### `message.proto`
-业务消息定义：
-
-| 消息 | 方向 | 频率 | 说明 |
-|------|------|------|------|
-| `AgvTelemetry` | 车→服务器 | 50Hz | 遥测数据：位姿(x,y,θ)、电量、速度、载荷、误差码、货叉高度 |
-| `AgvCommand` | 服务器→车 | 事件 | 系统指令：紧急制动、恢复、暂停、导航 |
-| `NavigationTask` | 服务器→车 | 事件 | 导航任务：目标点、操作类型、全局路径、任务 ID |
-| `LatencyProbe` | 双向 | 5s | RTT 延迟探测：序列号、时间戳、Ping/Pong 标识 |
-| `CommonResponse` | 服务器→车 | 事件 | 通用响应：状态码、消息文本 |
-| `Heartbeat` | 双向 | 1Hz | 心跳保活：车辆 ID + 时间戳 |
-| `MpcTrajectory` | 车→服务器 | 10Hz | MPC 控制器预测轨迹（预留） |
-| `TaskFeedback` | 车→服务器 | 事件 | 任务执行反馈（预留） |
-| `MessageEnvelope` | — | — | 通用消息信封（预留，用于协议扩展） |
-
-#### `message_id.h`
-消息类型 ID 常量定义与辅助函数：
-- 上行消息 (0x1000-0x1FFF): `MSG_AGV_TELEMETRY` (0x1001), `MSG_MPC_TRAJECTORY` (0x1002), `MSG_TASK_FEEDBACK` (0x1003)
-- 下行消息 (0x2000-0x2FFF): `MSG_AGV_COMMAND` (0x2001), `MSG_NAVIGATION_TASK` (0x2002), `MSG_LATENCY_PROBE` (0x2003)
-- 通用消息 (0x3000-0x3FFF): `MSG_COMMON_RESPONSE` (0x3001), `MSG_HEARTBEAT` (0x3002)
-- 辅助函数: `isUpstreamMessage()`, `isDownstreamMessage()`, `getMessageTypeName()`
-
-类型统一使用 `uint16_t`，与 LengthHeaderCodec 包头中的 MsgType 字段对齐。
-
-#### `common.pb.h` / `common.pb.cc` / `message.pb.h` / `message.pb.cc`
-由 `protoc` 从 `.proto` 文件自动生成的 C++ 序列化/反序列化代码。构建时通过 CMake 的 `protobuf_generate_cpp` 自动重新生成。
-
-#### `CMakeLists.txt`
-查找系统 Protobuf，调用 `protobuf_generate_cpp` 生成 C++ 代码，编译 `agv_proto` 静态库。
-
----
-
-### 网关核心层 `agv_server/gateway/`
-
-#### `GatewayServer.h` / `GatewayServer.cc`
-**AGV 网关服务器主类**，系统核心。
-
-构造参数：事件循环指针、监听地址、服务器名称、会话超时时间（默认 5s）、Worker 线程数（默认 4）。
-
-核心模块：
-- **TcpServer**: 管理 TCP 连接的建立与断开
-- **ProtobufDispatcher**: 根据消息类型自动路由到对应 handler
-- **SessionManager**: 管理所有 AGV 车辆的会话状态
-- **ThreadPool (Worker)**: 处理耗时业务（导航任务/数据库写入）
-- **LatencyMonitor**: RTT 延迟监控
-
-消息处理流程：
-```
-客户端数据 → onMessage() → LengthHeaderCodec 解包 → ProtobufDispatcher 分发
-  ├─ AgvTelemetry (50Hz)  → handleTelemetry()  [IO 线程直接处理]
-  ├─ Heartbeat (1Hz)      → handleHeartbeat()   [IO 线程直接处理]
-  ├─ AgvCommand (事件)    → handleAgvCommand()  [IO 线程透传转发]
-  ├─ NavigationTask (事件) → handleNavigationTask() → Worker 线程池
-  └─ LatencyProbe (5s)    → handleLatencyProbe() [IO 线程处理 Pong]
-```
-
-定时器：
-- **看门狗** (100ms): 遍历所有会话，超时标记 OFFLINE
-- **延迟探测** (默认 5s): 向所有在线车辆发送 LatencyProbe Ping
-
-业务引擎：
-- 遥测处理时检查电量，< 20% 自动下发 `CMD_NAVIGATE_TO` 充电指令
-- NavigationTask 投递到 Worker 线程，模拟 200ms 数据库写入
-- Worker 完成后通过 `runInLoop` 回到 IO 线程发送 CommonResponse
-
-#### `AgvSession.h` / `AgvSession.cc`
-**AGV 车辆会话状态结构**。
-
-每个连接的 AGV 对应一个 AgvSession 实例，包含：
-- `agv_id_`: 车辆唯一标识
-- `connection_`: `weak_ptr<TcpConnection>`（弱引用，不延长连接生命周期）
-- `state_`: 状态枚举（ONLINE / OFFLINE / CHARGING），`std::mutex` 保护
-- `battery_level_` / `last_active_time_`: `std::mutex` 保护
-- `pose_x_` / `pose_y_` / `pose_theta_` / `pose_confidence_`: **SpinLock (TTAS)** 保护，支持 50Hz 高频读写无阻塞
-
-双锁设计：
-- `std::mutex`: 保护低频更新的字段（电量、状态、活跃时间）
-- `SpinLock`: 保护高频更新的位姿字段（自旋锁，避免系统调用开销）
-
-#### `SessionManager.h` / `SessionManager.cc`
-**会话管理器**，封装 ConcurrentMap 提供领域语义接口。
-
-- `registerSession(agv_id, conn)`: 创建 AgvSession 并注册
-- `findSession(agv_id)`: 查找会话（返回 shared_ptr 拷贝，线程安全）
-- `removeSession(agv_id)`: 按 ID 移除
-- `removeSessionByConnection(conn)`: 连接断开时按连接对象反查并移除
-- `forEach(callback)`: 遍历所有会话（读锁保护）
-- `eraseIf(predicate)`: 条件批量删除
-
-#### `ConcurrentMap.h`
-**线程安全哈希映射**，header-only 模板类。
-
-基于 `std::shared_mutex` 实现读写锁：
-- `find()`: 读锁（shared_lock），返回 `shared_ptr` **拷贝**（而非引用/指针），即使其他线程删除原条目也不会悬挂
-- `insert()` / `erase()` / `clear()`: 写锁（unique_lock）
-- `forEach()`: 读锁遍历
-- `eraseIf()`: 写锁 + 条件删除
-
-#### `ProtobufDispatcher.h`
-**模板化类型安全消息分发器**，header-only。
-
-核心设计：
-- `registerHandler<T>(msg_type, callback)`: 注册特定 Protobuf 消息类型的处理函数，编译期 `static_assert` 检查 T 是否为 `google::protobuf::Message` 子类
-- `dispatch(conn, msg_type, data, len)`: 根据 msg_type 查找 handler，内部自动执行 Protobuf `ParseFromArray`，转发强类型消息到回调函数
-- 类型擦除：`HandlerBase` 虚基类 + `TypedHandler<T>` 模板子类，运行时多态
-
-替换了最初的 `switch-case` 硬编码分发，新增消息类型只需在 `initDispatcher()` 中添加一行 `registerHandler` 调用。
-
-#### `WorkerTask.h`
-**Worker 线程任务序列化结构**，header-only。
-
-设计要点：
-- `TcpConnectionWeakPtr conn`: 连接**弱引用**（Worker 处理期间连接可能断开）
-- `AgvSessionPtr session`: 会话**强引用**（确保处理期间会话不被销毁）
-- `shared_ptr<Message> message`: Protobuf 消息（堆分配，跨线程传递）
-- `Timestamp enqueue_time`: 入队时间（用于计算队列延迟）
-
-关键方法：
-- `getConnection()`: `weak_ptr::lock()` 提升为 shared_ptr，失败则表示连接已断开
-- `getMessage<T>()`: `dynamic_pointer_cast` 类型安全转换
-- `getQueueLatencyMs()`: 计算任务在队列中等待的时间
-
-#### `LatencyMonitor.h` / `LatencyMonitor.cc`
-**RTT 延迟监控器**。
-
-工作流程：
-1. `createPing(agv_id)`: 创建 LatencyProbe 消息（Ping），atomic 递增序列号，记录到 pending 映射
-2. 服务器发送 Ping → 客户端收到后原样回复 Pong（`is_response=true`）
-3. `processPong(probe)`: 匹配序列号，计算 RTT = now - send_timestamp
-
-统计数据（per-AGV）：
-- `latest_rtt_ms`: 最近一次 RTT
-- `avg_rtt_ms`: 平均 RTT
-- `min_rtt_ms` / `max_rtt_ms`: 极值
-- `sample_count`: 采样次数
-
-安全机制：`cleanupExpiredProbes(timeout_ms)` 定期清理超时的 pending 条目（默认 30s），防止客户端不回复 Pong 导致内存泄漏。
-
-线程安全：所有操作通过 `std::mutex` 保护，`next_seq_num_` 使用 `std::atomic`。
-
-#### `CMakeLists.txt`
-编译 `agv_gateway` 静态库，包含所有 gateway 源文件，链接 agv_codec、agv_proto、lsk_muduo_net/base、protobuf。
-
----
-
-### 服务器入口
-
-#### `GatewayMain.cc`
-服务器 `main()` 函数入口。
-
-功能：
-- 命令行参数解析：`--port`（监听端口，默认 9090）、`--timeout`（会话超时秒数，默认 5.0）、`--threads`（IO 线程数，默认 0 = 单 Reactor）
-- 信号处理：捕获 `SIGINT`/`SIGTERM`，执行 `loop.quit()` 优雅退出
-- 创建 GatewayServer 实例并启动事件循环
-
-#### `agv_server/CMakeLists.txt`
-组装服务器：添加 proto、codec、gateway 三个子目录，创建 `gateway_main` 可执行文件，链接所有静态库。
-
----
-
-## 架构设计
-
-### 线程模型
-
-```
-┌──────────────────────────────────────────────────────┐
-│                    IO 线程（Reactor）                  │
-│                                                      │
-│  epoll_wait → onMessage() → Codec 解包 → Dispatcher  │
-│                                                      │
-│  高频路径（直接处理）：                                │
-│    AgvTelemetry → updatePose (SpinLock)              │
-│    Heartbeat    → updateActiveTime (mutex)           │
-│    AgvCommand   → 查找目标连接 → 直接转发（透传）     │
-│    LatencyProbe → processPong → 更新 RTT 统计         │
-│                                                      │
-│  低频路径（投递到 Worker）：                           │
-│    NavigationTask → 构造 WorkerTask → ThreadPool.run()│
-│                                                      │
-│  定时器：                                             │
-│    看门狗 (100ms) → 遍历 Session → 超时标记 OFFLINE   │
-│    延迟探测 (5s)  → 遍历 Session → 发送 Ping          │
-└───────────────────────┬──────────────────────────────┘
-                        │ Task 投递
-                        ▼
-┌──────────────────────────────────────────────────────┐
-│              Worker 线程池（4 线程）                    │
-│                                                      │
-│  processWorkerTask():                                │
-│    1. weak_ptr.lock() 检查连接有效性                   │
-│    2. 模拟数据库写入 (200ms usleep)                    │
-│    3. runInLoop() 回到 IO 线程发送响应                 │
-└──────────────────────────────────────────────────────┘
-```
-
-### 协议交互时序
-
-```
-  AGV Client                    Gateway Server
-      │                              │
-      │──── AgvTelemetry (50Hz) ────►│  IO 线程更新 Session
-      │                              │
-      │◄─── Heartbeat ──────────────│  回复心跳
-      │──── Heartbeat ─────────────►│  刷新 last_active_time
-      │                              │
-      │◄─── AgvCommand ────────────│  低电量自动充电
-      │     (CMD_NAVIGATE_TO)        │
-      │                              │
-      │◄─── LatencyProbe (Ping) ───│  RTT 探测
-      │──── LatencyProbe (Pong) ───►│  计算 RTT
-      │                              │
-      │──── NavigationTask ────────►│  投递到 Worker
-      │                              │  ↓ 200ms DB 写入
-      │◄─── CommonResponse ────────│  IO 线程发送响应
-      │                              │
-  AGV-A                          Gateway
-      │──── AgvCommand ───────────►│  紧急制动透传
-      │     (target=AGV-B)          │  ↓ IO 线程直接转发
-      │◄─── CommonResponse ────────│  回复发送方
-      │                          AGV-B
-      │                     ◄──── AgvCommand ──│
-      │                           (EMERGENCY_STOP)
-```
-
----
-
-## 构建与运行
-
-### 依赖
-
-- GCC/G++ 9+（C++17 支持）
+- Linux
+- GCC / G++ 9+
 - CMake 3.10+
-- Protocol Buffers 3（libprotobuf-dev + protobuf-compiler）
+- Protobuf 3
 - pthread
 
-### 一键编译
+脚本会自动检查或安装的常见依赖包括：
+
+- `build-essential`
+- `cmake`
+- `make`
+- `libprotobuf-dev`
+- `protobuf-compiler`
+
+---
+
+## 4. 编译、增量编译、重编译详细步骤
+
+本项目已经提供了完整的 `build.sh`，一般优先用它。
+
+### 4.1 一键编译脚本用法
+
+第一次使用建议先赋予执行权限：
 
 ```bash
-chmod +x build.sh
-./build.sh              # Release 模式编译
-./build.sh -d           # Debug 模式编译
-./build.sh -r           # 清理后重新编译
-./build.sh -j 8         # 使用 8 个并行任务
-./build.sh -c           # 仅清理编译产物
+cd /home/ubuntu2004/server/lsk_muduo
+chmod +x build.sh cleanup.sh run_full_test.sh
 ```
 
-### 手动编译
+#### 常用编译命令
 
 ```bash
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+./build.sh
+```
+
+含义：
+
+- 默认使用 **Release** 模式。
+- 自动检测依赖。
+- 自动创建 `build/`、`bin/`、`lib/`。
+- 自动执行 `cmake ..` 和 `make -j$(nproc)`。
+
+#### Debug 编译
+
+```bash
+./build.sh -d
+```
+
+等价于把构建类型切换到 `Debug`，适合断点调试、配合 `gdb` 使用。
+
+#### 完全重编译
+
+```bash
+./build.sh -r
+```
+
+含义：
+
+- 先清理 `build/`、`bin/`、`lib/` 产物。
+- 再重新配置和编译。
+- 适合协议、CMake 配置或依赖切换后使用。
+
+#### 只清理，不编译
+
+```bash
+./build.sh -c
+```
+
+含义：
+
+- 删除构建目录。
+- 清空 `bin/` 下可执行文件。
+- 清理 `lib/` 下库文件。
+
+#### 指定并行编译任务数
+
+```bash
+./build.sh -j 8
+```
+
+适合手动控制编译并发度；如果不写，脚本默认使用 `nproc` 返回的 CPU 核心数。
+
+#### 跳过依赖检测
+
+```bash
+./build.sh --skip-deps
+```
+
+适合你已经确认编译环境齐全，只想直接构建时使用。
+
+### 4.2 build.sh 参数总表
+
+| 参数 | 作用 | 典型场景 |
+|---|---|---|
+| `-h`, `--help` | 显示帮助 | 查看脚本说明 |
+| `-d`, `--debug` | 使用 Debug 模式 | 调试源码 |
+| `-r`, `--rebuild` | 清理后重编 | 大改后全量编译 |
+| `-c`, `--clean` | 仅清理 | 删除旧产物 |
+| `-j N` | 指定编译并发数 | 控制 CPU 占用 |
+| `--skip-deps` | 跳过依赖检测与安装 | 环境已准备好 |
+
+### 4.3 手动 CMake 编译步骤
+
+如果你不想使用脚本，可以手动编译：
+
+#### Release 模式
+
+```bash
+cd /home/ubuntu2004/server/lsk_muduo
+mkdir -p build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 make -j$(nproc)
 ```
 
-### 启动服务器
+#### Debug 模式
 
 ```bash
-./bin/gateway_main --port 9090 --timeout 5.0 --threads 2
+cd /home/ubuntu2004/server/lsk_muduo
+mkdir -p build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+make -j$(nproc)
 ```
 
-### 运行测试
+### 4.4 重新配置时需要注意的点
+
+`build.sh` 内部会检查：
+
+- 当前源码根目录是否和旧的 `CMakeCache.txt` 一致。
+- 当前 `CMAKE_BUILD_TYPE` 是否和缓存一致。
+
+如果不一致，脚本会自动清掉旧缓存，避免“路径变了、用户变了、模式切换了但缓存没清”的常见问题。
+
+### 4.5 编译产物说明
+
+编译成功后，主要产物在这里：
+
+- `bin/gateway_main`：服务端程序。
+- `bin/agv_client_main`：模拟客户端程序。
+- `bin/test_lsk_server`：综合测试程序。
+- `lib/*.a`：静态库产物。
+- `build/compile_commands.json`：可供 clangd / VS Code 索引使用。
+
+---
+
+## 5. 启动服务器和客户端的详细步骤
+
+下面给出最实用的一套本地联调流程。
+
+### 5.1 第一步：可选清理旧进程
+
+如果你之前跑过服务端或客户端，先执行：
 
 ```bash
-./bin/test_lsk_server          # 综合测试（32 个用例，覆盖迭代 1-3）
-./bin/buffer_test              # Buffer 整数操作测试
-./bin/codec_test               # 编解码测试（粘包/半包/空载荷）
-./bin/proto_test               # Protobuf 序列化测试
-./bin/dispatcher_test          # 消息分发器测试
-./bin/concurrent_map_test      # 线程安全容器测试
-./bin/session_manager_test     # 会话管理测试
-./bin/worker_task_test         # Worker 任务投递测试
-./bin/fast_slow_separation_test # 快慢分离验证测试
+cd /home/ubuntu2004/server/lsk_muduo
+./cleanup.sh
+```
+
+这个脚本会：
+
+- 强制清理残留的 `gateway_main` 进程。
+- 强制清理残留的 `agv_client_main` 进程。
+- 等待端口释放。
+- 检查默认端口 `8000` 是否空闲。
+
+### 5.2 第二步：编译项目
+
+```bash
+cd /home/ubuntu2004/server/lsk_muduo
+./build.sh
+```
+
+如果你要调试，换成：
+
+```bash
+./build.sh -d
+```
+
+### 5.3 第三步：启动服务器
+
+最基础的启动方式：
+
+```bash
+./bin/gateway_main
+```
+
+这时服务器默认配置是：
+
+- `--port 8000`
+- `--timeout 5.0`
+- `--threads 0`
+
+另外，`gateway_main` 当前只暴露 **IO 线程数** 参数；`GatewayServer` 内部的 **Worker 线程池默认是 4 线程**，用于处理 `NavigationTask` 这类慢业务。
+
+也就是：
+
+- 监听 `8000` 端口。
+- 会话超时阈值 5 秒。
+- 单 Reactor 模式。
+
+#### 常见服务端启动命令
+
+```bash
+./bin/gateway_main --port 8000 --timeout 5.0 --threads 0
+./bin/gateway_main --port 8000 --timeout 5.0 --threads 4
+./bin/gateway_main --port 9000 --timeout 3.0 --threads 2
+```
+
+### 5.4 第四步：启动一个客户端
+
+最基础的启动方式：
+
+```bash
+./bin/agv_client_main
+```
+
+客户端默认配置是：
+
+- `--id AGV-DEFAULT`
+- `--server 127.0.0.1:8000`
+- `--freq 10.0`
+- `--battery 100.0`
+- `--timeout 8.0`
+
+这意味着默认客户端会：
+
+- 连接本机 `8000` 端口。
+- 以 10Hz 发遥测。
+- 初始满电。
+- 服务端消息超时 8 秒后进入看门狗急停。
+
+#### 常见客户端启动命令
+
+```bash
+./bin/agv_client_main --id AGV-001 --server 127.0.0.1:8000
+./bin/agv_client_main --id AGV-002 --server 127.0.0.1:8000 --freq 50
+./bin/agv_client_main --id AGV-003 --server 127.0.0.1:8000 --battery 18
+./bin/agv_client_main --id AGV-004 --server 127.0.0.1:8000 --freq 100 --timeout 3.0
+```
+
+### 5.5 第五步：观察典型联调场景
+
+#### 场景 A：单车正常上报
+
+服务端终端：
+
+```bash
+./bin/gateway_main --port 8000 --timeout 5.0 --threads 0
+```
+
+客户端终端：
+
+```bash
+./bin/agv_client_main --id AGV-NORMAL --server 127.0.0.1:8000 --freq 10 --battery 80
+```
+
+你会看到：
+
+- 客户端连上服务器。
+- 客户端开始持续发遥测和心跳。
+- 服务端创建对应 `AgvSession`。
+
+#### 场景 B：低电量自动充电
+
+服务端终端：
+
+```bash
+./bin/gateway_main --port 8000 --timeout 5.0 --threads 0
+```
+
+客户端终端：
+
+```bash
+./bin/agv_client_main --id AGV-LOWBAT --server 127.0.0.1:8000 --battery 18
+```
+
+预期现象：
+
+- 客户端上报低电量遥测。
+- 服务端检测到电量低于 20%。
+- 服务端下发 `CMD_NAVIGATE_TO`。
+- 客户端把它解释为“去充电桩”，状态切换到 `MOVING_TO_CHARGER` / `CHARGING`。
+
+#### 场景 C：多客户端并发联调
+
+先开服务器：
+
+```bash
+./bin/gateway_main --port 8000 --timeout 5.0 --threads 4
+```
+
+再分别开多个客户端：
+
+```bash
+./bin/agv_client_main --id AGV-001 --server 127.0.0.1:8000 --freq 10
+./bin/agv_client_main --id AGV-002 --server 127.0.0.1:8000 --freq 10
+./bin/agv_client_main --id AGV-003 --server 127.0.0.1:8000 --freq 50
+./bin/agv_client_main --id AGV-004 --server 127.0.0.1:8000 --battery 25
+```
+
+预期现象：
+
+- 服务端可同时维护多个会话。
+- 每个会话按自己的 `agv_id` 单独管理。
+- 多个客户端同时发消息时，服务端仍能正常处理。
+
+#### 场景 D：高频压测式运行
+
+```bash
+./bin/gateway_main --threads 4
+./bin/agv_client_main --id AGV-STRESS --server 127.0.0.1:8000 --freq 100 --battery 40
+```
+
+这个场景用于快速观察高频遥测对服务器的压力。
+
+### 5.6 服务端参数说明
+
+| 参数 | 默认值 | 说明 | 建议 |
+|---|---:|---|---|
+| `--port` | `8000` | 监听端口 | 本地联调保持 8000 最方便 |
+| `--timeout` | `5.0` | 会话超时秒数 | 联调可用 5 秒，快速实验可调小 |
+| `--threads` | `0` | IO 线程数，0 表示单 Reactor | 压测或多客户端时建议设为 2 或 4 |
+
+#### 服务端配置建议
+
+- **单机调试**：`--threads 0`
+- **多客户端联调**：`--threads 4`
+- **快速超时测试**：`--timeout 1.0`
+- **改端口运行**：同步修改客户端 `--server ip:port`
+
+### 5.7 客户端参数说明
+
+| 参数 | 默认值 | 说明 | 建议 |
+|---|---:|---|---|
+| `--id` | `AGV-DEFAULT` | 车辆 ID | 多车测试时必须保证唯一 |
+| `--server` | `127.0.0.1:8000` | 服务器地址 | 改端口时必须同步修改 |
+| `--freq` | `10.0` | 遥测频率 Hz | 功能联调用 10，压力测试可用 50 或 100 |
+| `--battery` | `100.0` | 初始电量 | 测充电逻辑可直接设为 18 |
+| `--timeout` | `8.0` | 客户端下行看门狗超时秒数 | 模拟失联可调成 1~3 秒 |
+
+### 5.8 停止服务端和客户端
+
+#### 优雅退出
+
+- 服务端支持 `Ctrl + C`，内部捕获 `SIGINT` / `SIGTERM` 后会退出事件循环。
+- 客户端直接 `Ctrl + C` 即可结束进程。
+
+#### 强制清理残留进程
+
+```bash
+./cleanup.sh
 ```
 
 ---
 
-## 迭代进度
+## 6. 测试与验证命令
 
-| 迭代 | 周次 | 状态 | 核心产出 |
-|------|------|------|----------|
-| 迭代一 | 1-2 | ✅ 完成 | Buffer 整数操作、Protobuf 协议、LengthHeaderCodec、GatewayServer 骨架、双闭环安全 |
-| 迭代二 | 3-4 | ✅ 完成 | ProtobufDispatcher、ConcurrentMap、SessionManager、心跳超时、多客户端联调 |
-| 迭代三 | 5-6 | ✅ 完成 | WorkerTask 投递、快慢分离、紧急制动透传、LatencyMonitor、200ms 业务阻塞验证 |
-| 迭代四 | 7-8 | 🔜 待开始 | LoadTester 压测模拟器、Statistics 统计、渐进式压测、火焰图、文档 |
+### 6.1 运行综合测试
+
+```bash
+./bin/test_lsk_server
+```
+
+当前综合测试覆盖以下测试组：
+
+- `BufferTest`
+- `CodecTest`
+- `ProtobufTest`
+- `ConcurrentMapTest`
+- `SpinLockTest`
+- `DispatcherTest`
+- `SessionManagerTest`
+- `LatencyMonitorTest`
+- `IntegrationTest`
+
+### 6.2 按组运行测试
+
+```bash
+./bin/test_lsk_server --gtest_filter=IntegrationTest.*
+./bin/test_lsk_server --gtest_filter=LatencyMonitorTest.*
+./bin/test_lsk_server --gtest_filter=SpinLockTest.*
+```
+
+### 6.3 查看测试清单
+
+```bash
+./bin/test_lsk_server --gtest_list_tests
+```
+
+### 6.4 运行完整性能脚本
+
+```bash
+./run_full_test.sh
+```
+
+这个脚本会自动执行多轮测试，包括：
+
+- 单 Reactor + 10Hz
+- 单 Reactor + 50Hz
+- 多 Reactor + 10Hz
+- 多 Reactor + 50Hz
+- 多 Reactor + 100Hz
+- 低电量触发充电流程
+
+脚本会把日志写入：
+
+- `/tmp/test_server.log`
+- `/tmp/test_client.log`
+
+并统计：
+
+- 看门狗超时次数
+- ERROR 数量
+- 电量变化次数
+
+---
+
+## 7. 典型工作流总结
+
+### 7.1 最常用的日常流程
+
+```bash
+cd /home/ubuntu2004/server/lsk_muduo
+./cleanup.sh
+./build.sh
+./bin/gateway_main --threads 4
+./bin/agv_client_main --id AGV-001 --server 127.0.0.1:8000 --freq 10
+```
+
+### 7.2 调试低电量逻辑
+
+```bash
+./bin/gateway_main
+./bin/agv_client_main --id AGV-LOW --server 127.0.0.1:8000 --battery 18
+```
+
+### 7.3 调试高频遥测与多 Reactor
+
+```bash
+./bin/gateway_main --threads 4
+./bin/agv_client_main --id AGV-FAST --server 127.0.0.1:8000 --freq 100 --battery 40
+```
+
+### 7.4 调试会话超时
+
+```bash
+./bin/gateway_main --timeout 1.0
+./bin/agv_client_main --id AGV-TIMEOUT --server 127.0.0.1:8000 --freq 10
+```
+
+说明：服务端会更快把会话标记为 `OFFLINE`。
+
+---
+
+## 8. 项目结构总览（带文件说明）
+
+下面这份结构图尽量覆盖当前仓库中最重要的源码、脚本和构建产物；每个条目后都附一条作用说明，方便你面试、汇报或二次开发时快速定位。
+
+```text
+lsk_muduo/
+├── .gitignore                           # Git 忽略规则，避免把构建目录、产物和临时文件提交进版本库。
+├── CMakeLists.txt                       # 顶层 CMake 入口，负责设置 C++17、输出目录、依赖查找和子模块编译顺序。
+├── README.md                            # 项目总说明文档，介绍背景、构建方法、运行步骤、结构和设计要点。
+├── build.sh                             # 一键编译脚本，负责依赖检查、配置 CMake、并行编译、重编译和清理。
+├── cleanup.sh                           # 运行环境清理脚本，用于杀掉残留服务端和客户端进程并检查 8000 端口是否释放。
+├── run_full_test.sh                     # 自动化性能验证脚本，会按不同线程数和频率组合批量启动服务端与客户端测试。
+├── agv_server/                          # AGV 网关服务端源码目录，包含入口、协议、编解码和核心业务逻辑。
+│   ├── CMakeLists.txt                   # 服务端子模块构建入口，负责组装 proto、codec、gateway 并生成 gateway_main。
+│   ├── GatewayMain.cc                   # 服务端 main 函数所在文件，负责解析参数、创建 EventLoop、启动 GatewayServer 和处理退出信号。
+│   ├── codec/                           # 协议编解码层目录，负责把 Protobuf 消息封装成长度头帧并解包。
+│   │   ├── CMakeLists.txt               # 编解码模块的构建文件，生成 agv_codec 静态库。
+│   │   ├── LengthHeaderCodec.h          # 编解码器声明文件，定义 8 字节头部格式、消息长度限制和编码解码接口。
+│   │   └── LengthHeaderCodec.cc         # 编解码器实现文件，完成粘包半包处理、消息长度检查和序列化帧组装。
+│   ├── gateway/                         # 网关核心逻辑目录，承载会话管理、消息分发、定时任务和业务处理。
+│   │   ├── AgvSession.h                 # AGV 会话类声明文件，封装车辆连接、状态、电量、活跃时间和位姿数据。
+│   │   ├── AgvSession.cc                # AGV 会话类实现文件，提供初始状态、默认电量和默认位姿设置。
+│   │   ├── CMakeLists.txt               # 网关核心模块构建文件，生成 agv_gateway 静态库。
+│   │   ├── ConcurrentMap.h              # 线程安全哈希表模板，使用 shared_mutex 支持并发读写和批量遍历。
+│   │   ├── GatewayServer.h              # 网关服务类声明文件，定义连接回调、消息处理、定时器逻辑和发送接口。
+│   │   ├── GatewayServer.cc             # 网关服务类实现文件，真正串起 TcpServer、Dispatcher、SessionManager、ThreadPool 和 LatencyMonitor。
+│   │   ├── LatencyMonitor.h             # RTT 监控器声明文件，定义 Ping/Pong 记录结构和延迟统计接口。
+│   │   ├── LatencyMonitor.cc            # RTT 监控器实现文件，负责创建探针、计算 RTT、更新均值并清理超时项。
+│   │   ├── ProtobufDispatcher.h         # Protobuf 模板分发器，按消息类型把字节流解析成强类型消息再调用对应 handler。
+│   │   ├── SessionManager.h             # 会话管理器声明文件，对 ConcurrentMap 做领域化封装并提供按连接删除会话等能力。
+│   │   ├── SessionManager.cc            # 会话管理器实现文件，负责注册、查找、移除、遍历和获取 AGV ID 快照。
+│   │   └── WorkerTask.h                 # Worker 任务结构定义文件，用于跨线程携带连接弱引用、消息对象和排队时间信息。
+│   └── proto/                           # 协议定义目录，统一描述所有上下行消息和枚举。
+│       ├── CMakeLists.txt               # Protobuf 构建文件，调用 protobuf_generate_cpp 并生成 agv_proto 静态库。
+│       ├── common.proto                 # 公共枚举与基础消息定义文件，包含状态码、指令类型、点位等基础协议元素。
+│       ├── common.pb.cc                 # 由 protoc 生成的 common 协议 C++ 实现文件，通常不手动修改。
+│       ├── common.pb.h                  # 由 protoc 生成的 common 协议 C++ 头文件，供业务代码直接使用。
+│       ├── message.proto                # 业务消息定义文件，声明遥测、心跳、导航任务、控制指令和延迟探针等消息。
+│       ├── message.pb.cc                # 由 protoc 生成的 message 协议 C++ 实现文件，提供序列化与反序列化能力。
+│       ├── message.pb.h                 # 由 protoc 生成的 message 协议 C++ 头文件，供服务端和客户端共同引用。
+│       └── message_id.h                 # 消息类型 ID 常量和辅助函数文件，负责把包头 MsgType 与具体业务消息对应起来。
+├── test_muduo/                          # 测试与模拟客户端目录，既包含测试程序也包含手动联调客户端。
+│   ├── AgvClientMain.cc                 # 模拟客户端 main 函数文件，负责解析命令行参数并启动 MockAgvClient。
+│   ├── CMakeLists.txt                   # 测试模块构建文件，生成 agv_client_main 和 test_lsk_server 可执行文件。
+│   ├── MockAgvClient.h                  # 模拟客户端类声明文件，定义车辆状态机、定时器、指令处理和看门狗逻辑。
+│   ├── MockAgvClient.cc                 # 模拟客户端实现文件，负责发遥测、发心跳、回 Pong、耗电、充电和状态切换。
+│   └── test_lsk_server.cc               # 综合测试源码，覆盖 Buffer、Codec、协议、会话、快慢分离、透传和延迟监控等功能。
+├── muduo/                               # 自研精简版 muduo 网络库目录，是整个项目的底层通信基础设施。
+│   ├── base/                            # 基础设施层目录，负责日志、时间、线程、自旋锁和计算线程池。
+│   │   ├── AsyncLogging.cc              # 异步日志实现文件，负责后台线程批量刷盘与缓冲切换。
+│   │   ├── AsyncLogging.h               # 异步日志声明文件，定义前后台缓冲协作和日志线程接口。
+│   │   ├── CurrentThread.cc             # 当前线程辅助实现文件，缓存线程 ID 等线程局部信息。
+│   │   ├── CurrentThread.h              # 当前线程辅助声明文件，提供获取线程 ID 的轻量接口。
+│   │   ├── LogFile.cc                   # 日志文件实现文件，负责落盘、flush 和滚动写日志。
+│   │   ├── LogFile.h                    # 日志文件声明文件，抽象单个日志文件的管理逻辑。
+│   │   ├── LogStream.cc                 # 日志流实现文件，处理格式化输出和流式拼接。
+│   │   ├── LogStream.h                  # 日志流声明文件，定义各种基础类型到日志缓冲的写入方式。
+│   │   ├── Logger.cc                    # 日志门面实现文件，提供日志级别、时间戳和输出入口。
+│   │   ├── Logger.h                     # 日志门面声明文件，定义 `LOG_INFO`、`LOG_WARN`、`LOG_ERROR` 等接口。
+│   │   ├── SpinLock.h                   # 自旋锁实现文件，基于 TTAS 算法优化极短临界区的加锁开销。
+│   │   ├── Thread.cc                    # 线程封装实现文件，负责启动线程、同步线程 ID 和 join 生命周期。
+│   │   ├── Thread.h                     # 线程封装声明文件，把 `std::thread` 包装成更易用的工程组件。
+│   │   ├── ThreadPool.cc                # 通用计算线程池实现文件，支持任务队列、条件变量唤醒和优雅停止。
+│   │   ├── ThreadPool.h                 # 通用计算线程池声明文件，供网关 Worker 线程池直接使用。
+│   │   ├── Timestamp.cc                 # 时间戳实现文件，负责当前时间获取和时间格式化。
+│   │   ├── Timestamp.h                  # 时间戳声明文件，定义微秒级时间表示和常用工具接口。
+│   │   ├── copyable.h                   # 可拷贝标记基类，用于表达“这个类型允许按值拷贝”。
+│   │   └── noncopyable.h                # 禁拷贝基类，用于禁止网络核心对象被意外复制。
+│   └── net/                             # 网络层目录，负责 Reactor、连接管理、定时器和缓冲区。
+│       ├── Acceptor.cc                  # 监听器实现文件，负责 accept 新连接并交给 TcpServer。
+│       ├── Acceptor.h                   # 监听器声明文件，封装监听 socket 和新连接回调。
+│       ├── Buffer.cc                    # 缓冲区实现文件，负责 `readv/write`、扩容和字节数据搬移。
+│       ├── Buffer.h                     # 缓冲区声明文件，提供 prepend、整数读写、字符串读取和读写指针管理。
+│       ├── Callbacks.h                  # 回调类型定义文件，统一连接回调、消息回调和写完成回调签名。
+│       ├── Channel.cc                   # Channel 实现文件，负责事件分发、回调触发和 tie 生命周期保护。
+│       ├── Channel.h                    # Channel 声明文件，表示“某个 fd 对哪些事件感兴趣”的封装对象。
+│       ├── Connector.cc                 # 主动连接器实现文件，负责非阻塞 connect、重试和连接建立阶段管理。
+│       ├── Connector.h                  # 主动连接器声明文件，供 TcpClient 发起连接和自动重连使用。
+│       ├── DefaultPoller.cc             # 默认 Poller 选择实现文件，决定当前平台使用哪种具体 Poller。
+│       ├── EPollPoller.cc               # epoll Poller 实现文件，负责 `epoll_wait` 和 channel 注册更新。
+│       ├── EPollPoller.h                # epoll Poller 声明文件，是 Linux 下的核心多路复用实现。
+│       ├── EventLoop.cc                 # 事件循环实现文件，负责 poll、事件分发、wakeup 和 pending functor 执行。
+│       ├── EventLoop.h                  # 事件循环声明文件，暴露 runInLoop、queueInLoop、runAfter、runEvery 等接口。
+│       ├── EventLoopThread.cc           # 单个 IO 线程封装实现文件，在线程中创建并运行一个 EventLoop。
+│       ├── EventLoopThread.h            # 单个 IO 线程封装声明文件，负责启动线程并返回对应 loop 指针。
+│       ├── EventLoopThreadPool.cc       # IO 线程池实现文件，负责创建多个 sub-reactor 并轮询分配连接。
+│       ├── EventLoopThreadPool.h        # IO 线程池声明文件，是多 Reactor 模式的基础组件。
+│       ├── InetAddress.cc               # 地址封装实现文件，负责 IP/端口与 `sockaddr_in` 间转换。
+│       ├── InetAddress.h                # 地址封装声明文件，为服务端监听和客户端连接统一表示网络地址。
+│       ├── Poller.cc                    # Poller 抽象基类实现文件，定义多路复用器公共行为。
+│       ├── Poller.h                     # Poller 抽象基类声明文件，为 epoll 等实现提供统一接口。
+│       ├── Socket.cc                    # socket 封装实现文件，负责 bind、listen、accept、shutdown 和选项设置。
+│       ├── Socket.h                     # socket 封装声明文件，把原始 fd 操作收束成对象化接口。
+│       ├── TcpClient.cc                 # TCP 客户端实现文件，负责和 Connector 配合建立连接与回收连接。
+│       ├── TcpClient.h                  # TCP 客户端声明文件，是 MockAgvClient 的底层主动连接组件。
+│       ├── TcpConnection.cc             # TCP 连接实现文件，负责读写缓冲区、发送、半关闭和回调触发。
+│       ├── TcpConnection.h              # TCP 连接声明文件，封装单条已建立连接的生命周期和 IO 事件。
+│       ├── TcpServer.cc                 # TCP 服务器实现文件，负责监听、创建 TcpConnection、分配 IO 线程和管理连接表。
+│       ├── TcpServer.h                  # TCP 服务器声明文件，是 GatewayServer 使用的底层服务端抽象。
+│       ├── Timer.cc                     # 定时器对象实现文件，保存到期时间、回调、重复间隔和重启逻辑。
+│       ├── Timer.h                      # 定时器对象声明文件，是 TimerQueue 管理的最小时间单元。
+│       ├── TimerId.h                    # 定时器 ID 文件，用于对外取消某个已注册定时器。
+│       ├── TimerQueue.cc                # 定时器队列实现文件，基于 timerfd 和红黑树统一管理所有定时任务。
+│       ├── TimerQueue.h                 # 定时器队列声明文件，提供添加、取消、过期处理和重置定时器的能力。
+│       └── WeakCallback.h               # 弱回调工具文件，用 weak_ptr 防止延迟回调执行时访问已析构对象。
+├── bin/                                 # 可执行文件输出目录，通常保存编译后的运行入口程序。
+│   ├── agv_client_main                  # 模拟客户端可执行文件，用于手动联调和轻量压力验证。
+│   ├── gateway_main                     # 服务端可执行文件，用于启动 AGV 网关服务器。
+│   └── test_lsk_server                  # 综合测试可执行文件，用于运行单元测试和集成测试。
+├── lib/                                 # 静态库输出目录，保存编译生成的底层库和业务库产物。
+├── build/                               # CMake 构建目录，保存缓存、Makefile、中间文件和生成的编译数据库。
+│   └── compile_commands.json            # 编译命令数据库，供 clangd、IDE 索引和静态分析使用。
+└── logs/                                # 运行日志目录，可存放多轮联调或压测产生的日志数据。
+```
+
+> 说明：`build/`、`bin/`、`lib/`、`logs/` 都属于运行或构建产物目录，核心阅读重点仍然是 `agv_server/`、`test_muduo/` 和 `muduo/`。
+
+---
+
+## 9. 这套项目最值得关注的设计点
+
+如果你后续要继续写文档、准备答辩或者面试，这个仓库最值得强调的点有五个：
+
+1. **网络库和业务层是一起做的**，不是简单调用第三方库写点业务代码。  
+2. **协议、会话、编解码、客户端模拟器、服务端、测试**全部形成闭环。  
+3. **快慢分离做得很明确**，`NavigationTask` 走 Worker，遥测和心跳留在 IO 线程。  
+4. **紧急制动单独走透传通道**，这非常符合高优先级控制指令的工程需求。  
+5. **测试是按系统能力组织的**，不是零散的演示代码，而是能证明整个架构行为是否成立。  
+
+---
+
+## 10. 当前可直接使用的三个入口程序
+
+### 服务端
+
+```bash
+./bin/gateway_main --port 8000 --timeout 5.0 --threads 4
+```
+
+### 模拟客户端
+
+```bash
+./bin/agv_client_main --id AGV-001 --server 127.0.0.1:8000 --freq 10 --battery 80
+```
+
+### 综合测试
+
+```bash
+./bin/test_lsk_server
+```
+
+如果你只想记最关键的一组命令，记这三条就够了。
+

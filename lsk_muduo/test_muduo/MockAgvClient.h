@@ -253,7 +253,7 @@ private:
     double watchdog_timeout_sec_;                ///< 看门狗超时（秒），可配置
 
     // 常量配置
-    static constexpr double kHeartbeatIntervalSec = 0.5;      ///< 心跳间隔（秒）
+    static constexpr double kHeartbeatIntervalSec = 0.2;      ///< 心跳间隔（秒）- 优化：从0.5s→0.2s提高可靠性
     static constexpr double kBatteryUpdateIntervalSec = 1.0;  ///< 电量更新间隔（秒）
     static constexpr double kWatchdogCheckIntervalSec = 0.1;  ///< 看门狗检查间隔（秒）
     static constexpr double kMovingToChargerDelaySec = 3.0;   ///< 移动到充电点的延迟（秒）
